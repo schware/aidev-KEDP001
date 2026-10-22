@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Pre-commit guard: blocks commits that would expose API keys.
+set -euo pipefail
+
+# 1) Never commit .env files (except .env.example)
+if git diff --cached --name-only --diff-filter=ACM \
+  | grep -E '(^|/)\.env(\.[^/]*)?$' | grep -vE '(^|/)\.env\.example$' | grep -q .; then
+  echo "[pre-commit] Blocked: a .env file is staged." >&2
+  exit 1
+fi
+
+# 2) Compare staged changes against the real key values in .env
+if [ -f .env ]; then
+  added=$(git diff --cached -U0 --no-color | grep '^+' | grep -v '^+++' || true)
+  while IFS='=' read -r name value; do
+    case "$name" in ''|\#*) continue ;; esac
+    value="${value%\"}"; value="${value#\"}"
+    [ "${#value}" -lt 8 ] && continue
+    if printf '%s' "$added" | grep -qF -- "$value"; then
+      echo "[pre-commit] Blocked: the value of $name from .env is in the staged changes." >&2
+      exit 1
+    fi
+  done < .env
+fi
+
+# 3) Pattern scan with gitleaks
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "[pre-commit] Blocked: gitleaks is not installed." >&2
+  exit 1
+fi
+gitleaks git --pre-commit --staged --redact --verbose
