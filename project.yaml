@@ -1,0 +1,20 @@
+project_id: KEDP001
+project_name: "한국 경제 데이터 플랫폼"
+default_language: ko
+timezone: Asia/Seoul
+project_status: draft
+
+common_spec:
+  repository: "AI-Native-Development-Rules"
+  path: "specification/00.common/README.md"
+  git_ref: "<set-before-development>"
+
+repository:
+  base_branch: main
+
+record_paths:
+  decision: "records/07.decision"
+
+notes:
+  - "project_id와 project_name은 프로젝트 소유자 확인 전 후보값이다."
+  - "common_spec.git_ref는 실제 Tag 또는 전체 Commit 해시로 교체해야 한다."
