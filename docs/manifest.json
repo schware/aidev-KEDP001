@@ -1,0 +1,21 @@
+{
+  "version": "0.1",
+  "status": "draft",
+  "created_at": "2026-10-22",
+  "files": [
+    "AGENTS.md",
+    "DOCUMENT-REVIEW.md",
+    "README.md",
+    "TODO.md",
+    "project.yaml",
+    "records/07.decision/README.md",
+    "records/07.decision/decisions/KEDP001-D001.md",
+    "records/07.decision/decisions/KEDP001-D002.md",
+    "records/07.decision/decisions/KEDP001-D003.md",
+    "records/07.decision/decisions/KEDP001-D004.md",
+    "records/07.decision/decisions/KEDP001-D005.md",
+    "samples/README.md",
+    "specification/00.common/README.md",
+    "specification/10.indicators/README.md"
+  ]
+}
