@@ -6,15 +6,25 @@ project_status: draft
 
 common_spec:
   repository: "AI-Native-Development-Rules"
-  path: "specification/00.common/README.md"
-  git_ref: "<set-before-development>"
+  path: "specification/"
+  git_ref: "<set-reference-version>"
 
 repository:
+  name: "aidev-KEDP001"
+  visibility: private
   base_branch: main
 
-record_paths:
+data_sources:
+  - ecos
+  - kosis
+  - data-go-kr
+
+paths:
+  agent_rules: ".claude"
+  docs: "docs"
   decision: "records/07.decision"
 
+work_items: github-issues
+
 notes:
-  - "project_id와 project_name은 프로젝트 소유자 확인 전 후보값이다."
-  - "common_spec.git_ref는 실제 Tag 또는 전체 Commit 해시로 교체해야 한다."
+  - "common_spec은 처음 만들 때 참고한 AI Native Development 버전을 기록한다. submodule로 연결하지 않으므로 Tag 또는 전체 Commit 해시를 손으로 적는다."
