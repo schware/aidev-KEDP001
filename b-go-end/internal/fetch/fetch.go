@@ -18,18 +18,40 @@ import (
 
 const masked = "***"
 
+// forms는 secret이 글에 나타날 수 있는 형태를 모두 돌려준다.
+// 원래 형태, 주소에 들어갈 때 바뀌는 형태(인코딩), 그리고 secret이 이미 인코딩된 형태일 때(공공데이터포털 Encoding 키) 푼 형태다.
+func forms(secret string) []string {
+	out := []string{secret, url.PathEscape(secret), url.QueryEscape(secret)}
+	if strings.Contains(secret, "%") {
+		if raw, err := url.QueryUnescape(secret); err == nil && raw != secret {
+			out = append(out, raw, url.PathEscape(raw), url.QueryEscape(raw))
+		}
+	}
+	return out
+}
+
 // Mask는 s 안의 키를 모두 ***로 바꾼다. 주소에 들어갈 때 바뀌는 형태(인코딩)도 함께 가린다.
 func Mask(s string, secrets ...string) string {
 	for _, secret := range secrets {
 		if secret == "" {
 			continue
 		}
-		for _, form := range []string{secret, url.PathEscape(secret), url.QueryEscape(secret)} {
+		for _, form := range forms(secret) {
 			s = strings.ReplaceAll(s, form, masked)
 		}
 	}
 	return s
 }
+
+// StatusError는 HTTP 상태 코드가 200이 아닌 응답이다.
+// 제공처에 따라 오류 내용이 본문에 오므로(공공데이터포털) 본문을 함께 둔다. URL은 가린 주소다.
+type StatusError struct {
+	URL  string
+	Code int
+	Body []byte
+}
+
+func (e *StatusError) Error() string { return fmt.Sprintf("GET %s: status %d", e.URL, e.Code) }
 
 // Client는 키를 알고 있는 HTTP 클라이언트다. 오류와 기록에서 키를 가린다.
 type Client struct {
@@ -47,6 +69,7 @@ func (c *Client) Mask(s string) string { return Mask(s, c.secrets...) }
 
 // Get은 rawURL에 GET 요청을 보내고 응답 본문을 돌려준다.
 // 돌려주는 오류에는 가린 주소만 들어 있다. 원래 오류는 키가 들어 있어 감싸지 않는다.
+// 상태 코드가 200이 아니면 *StatusError를 돌려준다.
 func (c *Client) Get(ctx context.Context, rawURL string) ([]byte, error) {
 	log.Printf("GET %s", c.Mask(rawURL))
 
@@ -65,17 +88,15 @@ func (c *Client) Get(ctx context.Context, rawURL string) ([]byte, error) {
 		return nil, errors.New(c.Mask(fmt.Sprintf("read %s: %v", rawURL, err)))
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET %s: status %d", c.Mask(rawURL), resp.StatusCode)
+		return nil, &StatusError{URL: c.Mask(rawURL), Code: resp.StatusCode, Body: body}
 	}
 	return body, nil
 }
 
-// Save는 응답 본문을 dir/name에 저장한다. 본문에 키가 들어 있으면 저장하지 않는다.
+// Save는 응답 본문을 dir/name에 저장한다. 본문에 키가 (어떤 형태로든) 들어 있으면 저장하지 않는다.
 func (c *Client) Save(dir, name string, body []byte) (string, error) {
-	for _, secret := range c.secrets {
-		if secret != "" && strings.Contains(string(body), secret) {
-			return "", errors.New("response contains an API key; not saved")
-		}
+	if c.Mask(string(body)) != string(body) {
+		return "", errors.New("response contains an API key; not saved")
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err

@@ -1,5 +1,5 @@
 // server는 KEDP 수집 프로그램의 시작점이다.
-// 지금(KEDP001-D021 2단계)은 지표 하나의 응답 샘플을 받아 저장하는 일만 한다.
+// 지금(KEDP001-D021 3단계)은 지표 하나의 응답 샘플을 받아 저장하는 일만 한다.
 //
 //	go run ./cmd/server -indicator ecos-base-rate -start 202401 -end 202609
 package main
@@ -16,6 +16,7 @@ import (
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/config"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/fetch"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/source"
+	datagokr "github.com/schware/aidev-KEDP001/b-go-end/internal/source/data_go_kr"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/source/ecos"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/source/kosis"
 )
@@ -60,6 +61,8 @@ func run(envPath, indicatorsPath, id, start, end, outDir string, timeout time.Du
 		src = ecos.New(keys.ECOS, client)
 	case "kosis":
 		src = kosis.New(keys.KOSIS, client)
+	case "data-go-kr":
+		src = datagokr.New(keys.DataGoKr, client)
 	default:
 		return fmt.Errorf("source %q is not implemented", ind.Source)
 	}

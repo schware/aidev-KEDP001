@@ -19,26 +19,18 @@ const (
 )
 
 // Source는 ECOS 제공처다.
-type Source struct {
-	key    string
-	client *fetch.Client
-}
+type Source struct{ source.Base }
 
 var _ source.Source = (*Source)(nil)
 
 // New는 ECOS 제공처를 만든다. client는 key를 가리도록 만든 것이어야 한다.
 func New(key string, client *fetch.Client) *Source {
-	return &Source{key: key, client: client}
+	return &Source{source.NewBase("ecos", "ECOS_API_KEY", key, client)}
 }
-
-func (s *Source) Name() string { return "ecos" }
 
 // Fetch는 StatisticSearch 원본 응답(JSON)을 돌려준다.
 func (s *Source) Fetch(ctx context.Context, req source.Request) ([]byte, error) {
-	if err := source.RequireKey(s.Name(), "ECOS_API_KEY", s.key); err != nil {
-		return nil, err
-	}
-	return s.client.Get(ctx, searchURL(s.key, req))
+	return s.Get(ctx, func(key string) string { return searchURL(key, req) })
 }
 
 // searchURL은 키가 들어간 요청 주소를 만든다. 이 주소는 fetch.Client를 거쳐서만 기록한다.
@@ -74,8 +66,7 @@ type searchResponse struct {
 
 // Check는 정상 응답인지 확인하고 행 수를 돌려준다.
 func (s *Source) Check(body []byte) (int, error) {
-	rows, err := Parse(body)
-	return len(rows), err
+	return source.Count(Parse(body))
 }
 
 // noDataCode는 "해당하는 데이터가 없음" 오류 코드다.
@@ -93,9 +84,8 @@ func Parse(body []byte) ([]Row, error) {
 	if r.StatisticSearch == nil {
 		return nil, errors.New("ecos: response has neither StatisticSearch nor RESULT")
 	}
-	if r.StatisticSearch.ListTotalCount > len(r.StatisticSearch.Row) {
-		return nil, fmt.Errorf("ecos: got %d of %d rows; paging is not implemented",
-			len(r.StatisticSearch.Row), r.StatisticSearch.ListTotalCount)
+	if err := source.RequireAllRows("ecos", len(r.StatisticSearch.Row), r.StatisticSearch.ListTotalCount); err != nil {
+		return nil, err
 	}
 	return r.StatisticSearch.Row, nil
 }
