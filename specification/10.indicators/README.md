@@ -16,17 +16,17 @@
 
 #### 한국은행 기준금리
 
-- 상태: pending
+- 상태: verified
 - API: StatisticSearch
 - 통계표: 한국은행 기준금리 및 여수신금리 (`722Y001`)
-- 항목 코드:
+- 항목 코드: `0101000` (한국은행 기준금리, 2026-10-25 StatisticItemList로 확인)
 - 주기: A, D, M, Q
-- 기간 key:
-- 값 key:
-- 단위 key:
-- 논리 key 후보:
-- 샘플:
-- 미확정 사항: 항목 코드
+- 기간 key: `TIME` (월 주기 예: `202401`)
+- 값 key: `DATA_VALUE` (문자열, 예: `"3.5"`)
+- 단위 key: `UNIT_NAME` (`연%`)
+- 논리 key 후보: `STAT_CODE` + `ITEM_CODE1` + 주기 + `TIME`
+- 샘플: `samples/ecos/722Y001-0101000-M-202401-202609.json` (월 주기, 33행)
+- 미확정 사항: 수집 주기(현재 샘플과 `indicators.yaml`은 M), 논리 key
 
 #### 소비자물가지수
 
