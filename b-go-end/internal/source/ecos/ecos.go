@@ -35,8 +35,8 @@ func (s *Source) Name() string { return "ecos" }
 
 // Fetch는 StatisticSearch 원본 응답(JSON)을 돌려준다.
 func (s *Source) Fetch(ctx context.Context, req source.Request) ([]byte, error) {
-	if s.key == "" {
-		return nil, errors.New("ecos: ECOS_API_KEY is not set")
+	if err := source.RequireKey(s.Name(), "ECOS_API_KEY", s.key); err != nil {
+		return nil, err
 	}
 	return s.client.Get(ctx, searchURL(s.key, req))
 }
@@ -61,20 +61,6 @@ type Row struct {
 	DataValue string `json:"DATA_VALUE"`
 }
 
-// APIError는 ECOS가 RESULT로 돌려준 오류다(예: INFO-100 인증키 오류, INFO-200 데이터 없음).
-type APIError struct {
-	Code    string
-	Message string
-}
-
-func (e *APIError) Error() string { return fmt.Sprintf("ecos: %s %s", e.Code, e.Message) }
-
-// NoData는 오류가 INFO-200(해당하는 데이터가 없음)인지 알려 준다.
-func NoData(err error) bool {
-	var apiErr *APIError
-	return errors.As(err, &apiErr) && apiErr.Code == "INFO-200"
-}
-
 type searchResponse struct {
 	StatisticSearch *struct {
 		ListTotalCount int   `json:"list_total_count"`
@@ -86,14 +72,23 @@ type searchResponse struct {
 	} `json:"RESULT"`
 }
 
-// Parse는 StatisticSearch 응답을 읽는다. ECOS 오류 응답이면 *APIError를 돌려준다.
+// Check는 정상 응답인지 확인하고 행 수를 돌려준다.
+func (s *Source) Check(body []byte) (int, error) {
+	rows, err := Parse(body)
+	return len(rows), err
+}
+
+// noDataCode는 "해당하는 데이터가 없음" 오류 코드다.
+const noDataCode = "INFO-200"
+
+// Parse는 StatisticSearch 응답을 읽는다. ECOS 오류 응답이면 *source.APIError를 돌려준다(예: INFO-100 인증키 오류).
 func Parse(body []byte) ([]Row, error) {
 	var r searchResponse
 	if err := json.Unmarshal(body, &r); err != nil {
 		return nil, fmt.Errorf("ecos: parse response: %w", err)
 	}
 	if r.Result != nil {
-		return nil, &APIError{Code: r.Result.Code, Message: r.Result.Message}
+		return nil, &source.APIError{Source: "ecos", Code: r.Result.Code, Message: r.Result.Message, NoData: r.Result.Code == noDataCode}
 	}
 	if r.StatisticSearch == nil {
 		return nil, errors.New("ecos: response has neither StatisticSearch nor RESULT")

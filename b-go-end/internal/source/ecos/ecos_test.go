@@ -1,26 +1,20 @@
 package ecos
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/config"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/fetch"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/source"
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/source/sourcetest"
 )
 
-// 받아 둔 샘플만 읽는다. 실제 API는 부르지 않는다(KEDP001-D021).
-const sampleDir = "../../../../samples/ecos"
+var sampleDir = sourcetest.SampleDir("ecos")
 
 func readSample(t *testing.T, name string) []byte {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(sampleDir, name))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
+	return sourcetest.ReadSample(t, sampleDir, name)
 }
 
 func TestParseBaseRate(t *testing.T) {
@@ -56,13 +50,13 @@ func TestParseBaseRate(t *testing.T) {
 
 func TestParseErrors(t *testing.T) {
 	_, err := Parse(readSample(t, "error-INFO-200.json"))
-	if !NoData(err) {
+	if !source.NoData(err) {
 		t.Errorf("INFO-200: err = %v, want no data", err)
 	}
 
 	_, err = Parse(readSample(t, "error-INFO-100.json"))
-	apiErr, ok := err.(*APIError)
-	if !ok || apiErr.Code != "INFO-100" || NoData(err) {
+	apiErr, ok := err.(*source.APIError)
+	if !ok || apiErr.Source != "ecos" || apiErr.Code != "INFO-100" || source.NoData(err) {
 		t.Errorf("INFO-100: err = %v", err)
 	}
 
@@ -90,16 +84,21 @@ func TestSearchURL(t *testing.T) {
 	}
 }
 
+func TestCheck(t *testing.T) {
+	n, err := New("", nil).Check(readSample(t, "722Y001-0101000-M-202401-202609.json"))
+	if err != nil || n != 33 {
+		t.Errorf("Check = %d, %v", n, err)
+	}
+}
+
+func TestFetchWithoutKey(t *testing.T) {
+	_, err := New("", fetch.New(0)).Fetch(t.Context(), source.Request{})
+	if err == nil || !strings.Contains(err.Error(), "ECOS_API_KEY") {
+		t.Errorf("err = %v", err)
+	}
+}
+
 // 샘플 파일에 키 자리 문자열이 그대로 남지 않았는지 확인한다.
 func TestSamplesHaveNoKeyPath(t *testing.T) {
-	entries, err := os.ReadDir(sampleDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, e := range entries {
-		b := readSample(t, e.Name())
-		if strings.Contains(string(b), "/StatisticSearch/") && !strings.Contains(string(b), "/StatisticSearch/***/") {
-			t.Errorf("%s: request path without masked key", e.Name())
-		}
-	}
+	sourcetest.CheckMasked(t, sampleDir, "/StatisticSearch/")
 }
