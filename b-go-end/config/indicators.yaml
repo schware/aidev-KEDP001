@@ -1,6 +1,7 @@
 # 지표 정보 (DB가 생기기 전까지 임시, KEDP001-D021)
 # 항목 코드는 ECOS StatisticItemList, KOSIS getMeta(type=ITM) 응답으로 확인한 값만 적는다.
 # KOSIS: stat_code=tblId(orgId 101), item_code=itmId, classes=objL1…, cycle=prdSe
+# 공공데이터포털(getETFPriceInfo_V2): stat_code=srtnCd(종목 코드), item_code 없음, cycle=D(일 단위만 있다. 요청에는 넣지 않는다)
 indicators:
   - id: ecos-base-rate
     name: 한국은행 기준금리
@@ -32,3 +33,21 @@ indicators:
     item_code: T100
     classes: ["00"] # 행정구역별: 전국
     cycle: Y
+
+  - id: data-go-kr-kodex-200
+    name: KODEX 200
+    source: data-go-kr
+    stat_code: "069500"
+    cycle: D
+
+  - id: data-go-kr-kodex-leverage
+    name: KODEX 레버리지
+    source: data-go-kr
+    stat_code: "122630"
+    cycle: D
+
+  - id: data-go-kr-kodex-inverse
+    name: KODEX 인버스
+    source: data-go-kr
+    stat_code: "114800"
+    cycle: D

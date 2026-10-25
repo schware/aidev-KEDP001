@@ -177,39 +177,51 @@
 ### 공공데이터포털 (금융위원회_증권상품시세정보)
 
 - API 기본 주소: `https://apis.data.go.kr/1160100/GetSecuritiesProductInfoService_V2`
-- 오퍼레이션: ETF 시세 (정확한 이름은 활용가이드로 확인)
+- 오퍼레이션: `getETFPriceInfo_V2` (2026-10-25 실제 요청으로 확인. `getETFPriceInfo`는 `12` NO_OPENAPI_SERVICE_ERROR)
+- 요청: `serviceKey`, `resultType=json`, `numOfRows`, `pageNo`, `likeSrtnCd`(종목 코드), `beginBasDt`, `endBasDt`(그 날은 포함하지 않는다)
+- 주기: 일(거래일)만 있다.
+- 응답 항목 이름(세 종목 같다): `basDt` 기준일자, `srtnCd` 종목 코드, `isinCd`, `itmsNm` 종목명, `clpr` 종가, `vs` 전일 대비, `fltRt` 등락률, `nav`, `mkp` 시가, `hipr` 고가, `lopr` 저가, `trqu` 거래량, `trPrc` 거래대금, `mrktTotAmt` 시가총액, `stLstgCnt` 상장좌수, `bssIdxIdxNm` 기초지수명, `bssIdxClpr` 기초지수 종가, `nPptTotAmt` 순자산총액. 값은 모두 문자열이다.
+- 데이터 갱신 시점: 2026-10-25(일) 16시에 마지막 `basDt`가 20261022(목)였고 20261023(금)은 없었다. 적어도 하루 이상 늦게 들어온다. 정확한 반영 시각은 확인하지 않았다.
+- 데이터 없음: 오류 코드가 아니라 `resultCode` `00`과 `totalCount` 0으로 온다.
+- 오류: `OpenAPI_ServiceResponse.cmmMsgHeader.returnReasonCode` (예: `30` 등록되지 않은 서비스키, HTTP 403)
 - 주의: 이름이 비슷한 "ESG증권상품" API와 다르다.
 - 주의: 레버리지·인버스는 투자 권유처럼 보이지 않도록 화면에 안내 문구가 필요하다.
 
 #### KODEX 200
 
-- 상태: pending
-- 종목 코드: `069500`
-- 기간 key:
-- 값 key:
-- 단위 key:
-- 샘플:
-- 미확정 사항: 응답 필드 이름, 데이터 갱신 시점
+- 상태: verified
+- 종목 코드: `069500` (`isinCd` `KR7069500007`)
+- 기초지수(`bssIdxIdxNm`): 코스피 200
+- 기간 key: `basDt` (예: `20261022`)
+- 값 key: `clpr` 종가 (문자열, 예: `"86525"`)
+- 단위 key: 없음 (응답에 단위 항목이 없다)
+- 논리 key 후보: `srtnCd` + `basDt`
+- 샘플: `samples/data-go-kr/069500-D-20260901-20261022.json` (일, 34행)
+- 미확정 사항: 어느 값(`clpr`, `nav` 등)을 지표로 쓸지, 정확한 데이터 반영 시각, 논리 key
 
 #### KODEX 레버리지
 
-- 상태: pending
-- 종목 코드: `122630`
-- 기간 key:
-- 값 key:
-- 단위 key:
-- 샘플:
-- 미확정 사항: 응답 필드 이름, 데이터 갱신 시점
+- 상태: verified
+- 종목 코드: `122630` (`isinCd` `KR7122630007`)
+- 기초지수(`bssIdxIdxNm`): 코스피 200
+- 기간 key: `basDt` (예: `20261022`)
+- 값 key: `clpr` 종가 (문자열, 예: `"66770"`)
+- 단위 key: 없음 (응답에 단위 항목이 없다)
+- 논리 key 후보: `srtnCd` + `basDt`
+- 샘플: `samples/data-go-kr/122630-D-20260901-20261022.json` (일, 34행)
+- 미확정 사항: 어느 값(`clpr`, `nav` 등)을 지표로 쓸지, 정확한 데이터 반영 시각, 논리 key
 
 #### KODEX 인버스
 
-- 상태: pending
-- 종목 코드: `114800`
-- 기간 key:
-- 값 key:
-- 단위 key:
-- 샘플:
-- 미확정 사항: 응답 필드 이름, 데이터 갱신 시점
+- 상태: verified
+- 종목 코드: `114800` (`isinCd` `KR7114800006`)
+- 기초지수(`bssIdxIdxNm`): 코스피 200 선물지수
+- 기간 key: `basDt` (예: `20261022`)
+- 값 key: `clpr` 종가 (문자열, 예: `"1243"`)
+- 단위 key: 없음 (응답에 단위 항목이 없다)
+- 논리 key 후보: `srtnCd` + `basDt`
+- 샘플: `samples/data-go-kr/114800-D-20260901-20261022.json` (일, 34행)
+- 미확정 사항: 어느 값(`clpr`, `nav` 등)을 지표로 쓸지, 정확한 데이터 반영 시각, 논리 key
 
 ## 추가 후보
 

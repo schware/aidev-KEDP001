@@ -22,26 +22,18 @@ const (
 )
 
 // Source는 KOSIS 제공처다.
-type Source struct {
-	key    string
-	client *fetch.Client
-}
+type Source struct{ source.Base }
 
 var _ source.Source = (*Source)(nil)
 
 // New는 KOSIS 제공처를 만든다. client는 key를 가리도록 만든 것이어야 한다.
 func New(key string, client *fetch.Client) *Source {
-	return &Source{key: key, client: client}
+	return &Source{source.NewBase("kosis", "KOSIS_API_KEY", key, client)}
 }
-
-func (s *Source) Name() string { return "kosis" }
 
 // Fetch는 statisticsParameterData 원본 응답(JSON)을 돌려준다.
 func (s *Source) Fetch(ctx context.Context, req source.Request) ([]byte, error) {
-	if err := source.RequireKey(s.Name(), "KOSIS_API_KEY", s.key); err != nil {
-		return nil, err
-	}
-	return s.client.Get(ctx, dataURL(s.key, req))
+	return s.Get(ctx, func(key string) string { return dataURL(key, req) })
 }
 
 // dataURL은 키가 들어간 요청 주소를 만든다. 이 주소는 fetch.Client를 거쳐서만 기록한다.
@@ -67,8 +59,7 @@ func dataURL(key string, req source.Request) string {
 
 // Check는 정상 응답인지 확인하고 행 수를 돌려준다.
 func (s *Source) Check(body []byte) (int, error) {
-	rows, err := Parse(body)
-	return len(rows), err
+	return source.Count(Parse(body))
 }
 
 // Row는 statisticsParameterData 응답의 한 행이다. 값은 응답 그대로 문자열로 둔다.

@@ -3,6 +3,7 @@ package source
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/config"
@@ -16,6 +17,11 @@ func TestSampleName(t *testing.T) {
 	kosis := Request{Indicator: config.Indicator{StatCode: "DT_1IN1502", ItemCode: "T100", Classes: []string{"00"}, Cycle: "Y"}, Start: "2015", End: "2025"}
 	if got := kosis.SampleName(); got != "DT_1IN1502-T100-00-Y-2015-2025.json" {
 		t.Errorf("kosis = %s", got)
+	}
+	// 항목 코드가 없으면 그 칸이 빠진다.
+	dataGoKr := Request{Indicator: config.Indicator{StatCode: "069500", Cycle: "D"}, Start: "20260901", End: "20261022"}
+	if got := dataGoKr.SampleName(); got != "069500-D-20260901-20261022.json" {
+		t.Errorf("data-go-kr = %s", got)
 	}
 }
 
@@ -35,5 +41,28 @@ func TestRequireKey(t *testing.T) {
 	}
 	if err := RequireKey("kosis", "KOSIS_API_KEY", "k"); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestBaseGetWithoutKey(t *testing.T) {
+	b := NewBase("kosis", "KOSIS_API_KEY", "", nil)
+	_, err := b.Get(t.Context(), func(string) string { t.Error("buildURL called without key"); return "" })
+	if err == nil || !strings.Contains(err.Error(), "KOSIS_API_KEY") || b.Name() != "kosis" {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestRequireAllRows(t *testing.T) {
+	if err := RequireAllRows("ecos", 1, 2); err == nil {
+		t.Error("want error")
+	}
+	if err := RequireAllRows("ecos", 2, 2); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestCount(t *testing.T) {
+	if n, err := Count([]int{1, 2}, nil); n != 2 || err != nil {
+		t.Errorf("Count = %d, %v", n, err)
 	}
 }
