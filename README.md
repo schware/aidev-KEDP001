@@ -6,7 +6,11 @@
 
 ## 목적
 
+<<<<<<< Updated upstream
 한국은행 ECOS와 KOSIS가 무상으로 제공하는 국내 공식 통계를 수집하여 사용자가 지표를 조회하고 비교할 수 있는 웹 플랫폼을 개발한다.
+=======
+한국은행 ECOS, KOSIS, 공공데이터포털이 무상으로 제공하는 국내 공식 통계와 ETF 시세를 수집하여, 사용자가 지표를 조회할 수 있는 웹 플랫폼을 개발한다. 지표 비교와 분석은 2차에서 다룬다.
+>>>>>>> Stashed changes
 
 ## 기본 원칙
 
@@ -40,6 +44,7 @@ API 키 준비
 
 ## 문서 구조
 
+<<<<<<< Updated upstream
 - `project.yaml`: 프로젝트 공통 메타데이터
 - `AGENTS.md`: AI Agent 역할과 최소 공통 규칙
 - `TODO.md`: 현재 실행 작업
@@ -47,12 +52,32 @@ API 키 준비
 - `specification/10.indicators/README.md`: 지표와 API 조사 결과
 - `records/07.decision/README.md`: Decision Specification 적용 규칙
 - `records/07.decision/decisions/`: 개별 결정 기록
+=======
+| 무엇 | 어디 |
+| --- | --- |
+| 프로젝트 기본 정보 | `project.yaml` |
+| AI Agent 규칙 | `.claude/CLAUDE.md` |
+| 공통 규칙 | `specification/00.common/README.md` |
+| 지표와 API 조사 결과 | `specification/10.indicators/README.md` |
+| 화면 명세 | `specification/50.web/README.md` |
+| 결정 기록 | `records/07.decision/decisions/` |
+| 안내서 | `docs/` |
+| 작업 목록 | GitHub Issues |
+
+## 처음 시작할 때
+
+clone 뒤 키 보호 설정과 `.env` 준비가 필요하다. `docs/key-protection.md`의 "팀원 시작 안내"를 따른다.
+>>>>>>> Stashed changes
 
 ## 아직 확정하지 않은 것
 
 - 프로젝트 ID와 정식 명칭
 - DB 물리 스키마
+<<<<<<< Updated upstream
 - ECOS·KOSIS 저장 방식
 - Go와 Rust의 물리적 연결 방식
 - 관리자 화면 상세 범위
 - 첫 공개 지표 수
+=======
+- ECOS·KOSIS·공공데이터포털 저장 방식
+>>>>>>> Stashed changes
