@@ -34,12 +34,28 @@ func (s *Source) Fetch(ctx context.Context, req source.Request) ([]byte, error) 
 }
 
 // searchURL은 키가 들어간 요청 주소를 만든다. 이 주소는 fetch.Client를 거쳐서만 기록한다.
+// 분류(Classes)가 있으면 ITEM_CODE2, ITEM_CODE3… 자리에 차례로 붙인다.
 func searchURL(key string, req source.Request) string {
 	ind := req.Indicator
-	return fmt.Sprintf("%s/StatisticSearch/%s/json/kr/1/%d/%s/%s/%s/%s/%s",
+	u := fmt.Sprintf("%s/StatisticSearch/%s/json/kr/1/%d/%s/%s/%s/%s/%s",
 		baseURL, url.PathEscape(key), pageSize,
 		url.PathEscape(ind.StatCode), url.PathEscape(ind.Cycle),
 		url.PathEscape(req.Start), url.PathEscape(req.End), url.PathEscape(ind.ItemCode))
+	for _, c := range ind.Classes {
+		u += "/" + url.PathEscape(c)
+	}
+	return u
+}
+
+// FetchItems는 통계표 하나의 StatisticItemList 원본 응답(JSON)을 돌려준다. 항목 코드를 확인할 때 쓴다.
+func (s *Source) FetchItems(ctx context.Context, statCode string) ([]byte, error) {
+	return s.Get(ctx, func(key string) string { return itemListURL(key, statCode) })
+}
+
+// itemListURL은 키가 들어간 요청 주소를 만든다. 이 주소는 fetch.Client를 거쳐서만 기록한다.
+func itemListURL(key, statCode string) string {
+	return fmt.Sprintf("%s/StatisticItemList/%s/json/kr/1/%d/%s",
+		baseURL, url.PathEscape(key), pageSize, url.PathEscape(statCode))
 }
 
 // Row는 StatisticSearch 응답의 한 행이다. 값은 응답 그대로 문자열로 둔다.

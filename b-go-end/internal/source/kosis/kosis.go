@@ -15,6 +15,7 @@ import (
 
 const (
 	baseURL = "https://kosis.kr/openapi/Param/statisticsParameterData.do"
+	metaURL = "https://kosis.kr/openapi/statisticsData.do"
 	// 조사 대상 통계표는 모두 통계청(101)이다.
 	orgID = "101"
 	// noDataCode는 "데이터가 존재하지 않습니다" 오류 코드다.
@@ -55,6 +56,24 @@ func dataURL(key string, req source.Request) string {
 	q.Set("startPrdDe", req.Start)
 	q.Set("endPrdDe", req.End)
 	return baseURL + "?" + q.Encode()
+}
+
+// FetchMeta는 통계표 하나의 getMeta 원본 응답(JSON)을 돌려준다. metaType은 요청의 type 값 그대로다(예: ITM, TBL, PRD).
+func (s *Source) FetchMeta(ctx context.Context, tblID, metaType string) ([]byte, error) {
+	return s.Get(ctx, func(key string) string { return getMetaURL(key, tblID, metaType) })
+}
+
+// getMetaURL은 키가 들어간 요청 주소를 만든다. 이 주소는 fetch.Client를 거쳐서만 기록한다.
+func getMetaURL(key, tblID, metaType string) string {
+	q := url.Values{}
+	q.Set("method", "getMeta")
+	q.Set("type", metaType)
+	q.Set("apiKey", key)
+	q.Set("format", "json")
+	q.Set("jsonVD", "Y")
+	q.Set("orgId", orgID)
+	q.Set("tblId", tblID)
+	return metaURL + "?" + q.Encode()
 }
 
 // Check는 정상 응답인지 확인하고 행 수를 돌려준다.

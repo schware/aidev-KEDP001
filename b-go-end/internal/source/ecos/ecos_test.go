@@ -84,6 +84,29 @@ func TestSearchURL(t *testing.T) {
 	}
 }
 
+func TestSearchURLWithClasses(t *testing.T) {
+	req := source.Request{
+		Indicator: config.Indicator{StatCode: "901Y009", ItemCode: "0", Classes: []string{"A", "B"}, Cycle: "Q"},
+		Start:     "2024Q1",
+		End:       "2024Q4",
+	}
+	want := "https://ecos.bok.or.kr/api/StatisticSearch/TESTKEY/json/kr/1/1000/901Y009/Q/2024Q1/2024Q4/0/A/B"
+	if got := searchURL("TESTKEY", req); got != want {
+		t.Errorf("searchURL = %s", got)
+	}
+}
+
+func TestItemListURL(t *testing.T) {
+	want := "https://ecos.bok.or.kr/api/StatisticItemList/TESTKEY/json/kr/1/1000/722Y001"
+	if got := itemListURL("TESTKEY", "722Y001"); got != want {
+		t.Errorf("itemListURL = %s", got)
+	}
+	_, err := New("", fetch.New(0)).FetchItems(t.Context(), "722Y001")
+	if err == nil || !strings.Contains(err.Error(), "ECOS_API_KEY") {
+		t.Errorf("FetchItems without key: err = %v", err)
+	}
+}
+
 func TestCheck(t *testing.T) {
 	n, err := New("", nil).Check(readSample(t, "722Y001-0101000-M-202401-202609.json"))
 	if err != nil || n != 33 {

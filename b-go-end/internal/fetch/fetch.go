@@ -53,6 +53,28 @@ type StatusError struct {
 
 func (e *StatusError) Error() string { return fmt.Sprintf("GET %s: status %d", e.URL, e.Code) }
 
+// Exchange는 받은 응답 하나의 기록이다. URL은 가린 주소다. 본문은 가리지 않은 그대로다.
+type Exchange struct {
+	URL        string
+	Status     int
+	ReceivedAt time.Time
+	Body       []byte
+}
+
+type recorderKey struct{}
+
+// WithRecorder는 이 ctx로 보낸 요청이 응답을 받을 때마다(상태 코드와 상관없이) record를 부르는 ctx를 돌려준다.
+// 응답을 받지 못한 요청(시간 초과 등)은 부르지 않는다.
+func WithRecorder(ctx context.Context, record func(Exchange)) context.Context {
+	return context.WithValue(ctx, recorderKey{}, record)
+}
+
+func record(ctx context.Context, e Exchange) {
+	if f, ok := ctx.Value(recorderKey{}).(func(Exchange)); ok {
+		f(e)
+	}
+}
+
 // Client는 키를 알고 있는 HTTP 클라이언트다. 오류와 기록에서 키를 가린다.
 type Client struct {
 	http    *http.Client
@@ -87,6 +109,7 @@ func (c *Client) Get(ctx context.Context, rawURL string) ([]byte, error) {
 	if err != nil {
 		return nil, errors.New(c.Mask(fmt.Sprintf("read %s: %v", rawURL, err)))
 	}
+	record(ctx, Exchange{URL: c.Mask(rawURL), Status: resp.StatusCode, ReceivedAt: time.Now(), Body: body})
 	if resp.StatusCode != http.StatusOK {
 		return nil, &StatusError{URL: c.Mask(rawURL), Code: resp.StatusCode, Body: body}
 	}
