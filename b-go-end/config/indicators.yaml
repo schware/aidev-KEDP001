@@ -1,0 +1,9 @@
+# 지표 정보 (DB가 생기기 전까지 임시, KEDP001-D021)
+# 항목 코드는 ECOS StatisticItemList 응답으로 확인한 값만 적는다.
+indicators:
+  - id: ecos-base-rate
+    name: 한국은행 기준금리
+    source: ecos
+    stat_code: 722Y001
+    item_code: "0101000"
+    cycle: M
