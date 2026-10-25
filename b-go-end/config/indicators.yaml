@@ -1,5 +1,6 @@
 # 지표 정보 (DB가 생기기 전까지 임시, KEDP001-D021)
-# 항목 코드는 ECOS StatisticItemList 응답으로 확인한 값만 적는다.
+# 항목 코드는 ECOS StatisticItemList, KOSIS getMeta(type=ITM) 응답으로 확인한 값만 적는다.
+# KOSIS: stat_code=tblId(orgId 101), item_code=itmId, classes=objL1…, cycle=prdSe
 indicators:
   - id: ecos-base-rate
     name: 한국은행 기준금리
@@ -7,3 +8,27 @@ indicators:
     stat_code: 722Y001
     item_code: "0101000"
     cycle: M
+
+  - id: kosis-employment-rate
+    name: 고용률(15세 이상)
+    source: kosis
+    stat_code: DT_1DA7001S
+    item_code: T90
+    classes: ["0"] # 성별: 계
+    cycle: M
+
+  - id: kosis-births
+    name: 출생아 수
+    source: kosis
+    stat_code: INH_1B8000F_01
+    item_code: T1
+    classes: ["11"] # 기본항목별: 출생아수(명)
+    cycle: Y
+
+  - id: kosis-total-population
+    name: 총인구
+    source: kosis
+    stat_code: DT_1IN1502
+    item_code: T100
+    classes: ["00"] # 행정구역별: 전국
+    cycle: Y

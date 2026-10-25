@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -44,7 +45,16 @@ func TestLoadIndicators(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Indicator{ID: "ecos-base-rate", Name: "한국은행 기준금리", Source: "ecos", StatCode: "722Y001", ItemCode: "0101000", Cycle: "M"}
-	if ind != want {
+	if !reflect.DeepEqual(ind, want) {
+		t.Errorf("indicator = %+v", ind)
+	}
+
+	ind, err = FindIndicator(list, "kosis-employment-rate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = Indicator{ID: "kosis-employment-rate", Name: "고용률(15세 이상)", Source: "kosis", StatCode: "DT_1DA7001S", ItemCode: "T90", Classes: []string{"0"}, Cycle: "M"}
+	if !reflect.DeepEqual(ind, want) {
 		t.Errorf("indicator = %+v", ind)
 	}
 	if _, err := FindIndicator(list, "none"); err == nil {

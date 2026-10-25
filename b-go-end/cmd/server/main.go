@@ -1,5 +1,5 @@
 // server는 KEDP 수집 프로그램의 시작점이다.
-// 1단계(KEDP001-D021)에서는 지표 하나의 응답 샘플을 받아 저장하는 일만 한다.
+// 지금(KEDP001-D021 2단계)은 지표 하나의 응답 샘플을 받아 저장하는 일만 한다.
 //
 //	go run ./cmd/server -indicator ecos-base-rate -start 202401 -end 202609
 package main
@@ -10,12 +10,14 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/config"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/fetch"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/source"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/source/ecos"
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/source/kosis"
 )
 
 func main() {
@@ -56,25 +58,27 @@ func run(envPath, indicatorsPath, id, start, end, outDir string, timeout time.Du
 	switch ind.Source {
 	case "ecos":
 		src = ecos.New(keys.ECOS, client)
+	case "kosis":
+		src = kosis.New(keys.KOSIS, client)
 	default:
 		return fmt.Errorf("source %q is not implemented", ind.Source)
 	}
 
-	body, err := src.Fetch(context.Background(), source.Request{Indicator: ind, Start: start, End: end})
+	req := source.Request{Indicator: ind, Start: start, End: end}
+	body, err := src.Fetch(context.Background(), req)
 	if err != nil {
 		return err
 	}
 	// 정상 응답만 샘플로 저장한다.
-	rows, err := ecos.Parse(body)
+	n, err := src.Check(body)
 	if err != nil {
 		return err
 	}
 
-	name := fmt.Sprintf("%s-%s-%s-%s-%s.json", ind.StatCode, ind.ItemCode, ind.Cycle, start, end)
-	path, err := client.Save(outDir+"/"+src.Name(), name, body)
+	path, err := client.Save(filepath.Join(outDir, src.Name()), req.SampleName(), body)
 	if err != nil {
 		return err
 	}
-	log.Printf("saved %d rows to %s", len(rows), path)
+	log.Printf("saved %d rows to %s", n, path)
 	return nil
 }
