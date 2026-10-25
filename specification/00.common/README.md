@@ -1,23 +1,25 @@
 # Project Common Specification
 
 - 상태: draft
-- 목적: 외부 Common Specification을 이 프로젝트에 적용하기 위한 최소 프로젝트 규칙
+- 목적: AI Native Development를 이 프로젝트에 적용하기 위한 최소 프로젝트 규칙
 
 ## 1. 적용 기준
 
-이 프로젝트는 `project.yaml`의 `common_spec`에 기록된 Common Specification 버전을 따른다.
+이 프로젝트는 처음 만들 때 참고한 AI Native Development 버전을 바탕으로 한다. 참고한 버전은 `project.yaml`의 `common_spec`에 기록한다.
 
-- Branch 이름이 아니라 Git Tag 또는 전체 Commit 해시를 사용한다.
-- 외부 Common Specification의 검토 중인 항목은 실행 기준으로 사용하지 않는다.
+- Branch 이름이 아니라 Git Tag 또는 전체 Commit 해시를 기록한다.
+- 새 버전은 소유자가 다시 확인하라고 요청할 때만 읽는다. 바뀐 점과 반영안을 보여주고, 소유자 승인 뒤 반영한다.
 - 충돌이 발견되면 AI Agent가 임의 해석하지 않고 프로젝트 소유자에게 보고한다.
 
 ## 2. 프로젝트 SSoT
 
 - 프로젝트 메타데이터: `project.yaml`
-- 현재 공통 규칙: 이 문서와 적용된 Common Specification
+- AI Agent 규칙: `.claude/CLAUDE.md`
+- 현재 공통 규칙: 이 문서
 - 지표 정의와 조사 결과: `specification/10.indicators/README.md`
 - 중요한 결정: `records/07.decision/decisions/`
-- 현재 실행 작업: `TODO.md`
+- 안내서: `docs/`
+- 현재 실행 작업: GitHub Issues
 - 변경 이력: Git
 
 ## 3. 사람과 AI Agent
@@ -36,6 +38,9 @@ AI Agent가 독자적으로 할 수 없는 일:
 - 확정된 결정의 의미 변경
 - 현재 적용 규칙 변경
 - 복구하기 어려운 작업 실행
+- commit, push, PR 생성, merge (사람이 요청하면 PR 생성까지 가능, merge는 하지 않음)
+- `b-proto/` 약속서 변경 (소유자 승인 후 가능)
+- 개발 도구 설치 (안내만 함)
 
 ## 4. 문서 원칙
 
@@ -67,3 +72,5 @@ status: pending | verified | excluded
 - 확인되지 않은 지표 코드를 사실처럼 기록하지 않는다.
 - 원자료와 서비스 계산값을 구분한다.
 - 공식 근거 없는 집계를 구현하지 않는다.
+- API 키는 로그, 에러, 샘플에 기록할 때 가린다.
+- 키가 노출되면 재발급이 먼저이고, 기록 정리는 그다음이다.
