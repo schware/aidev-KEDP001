@@ -6,7 +6,7 @@
 
 ## 목적
 
-한국은행 ECOS, KOSIS, 공공데이터포털이 무상으로 제공하는 국내 공식 통계와 ETF 시세를 수집하여, 사용자가 지표를 조회하고 비교할 수 있는 웹 플랫폼을 개발한다.
+한국은행 ECOS, KOSIS, 공공데이터포털이 무상으로 제공하는 국내 공식 통계와 ETF 시세를 수집하여, 사용자가 지표를 조회할 수 있는 웹 플랫폼을 개발한다. 지표 비교와 분석은 2차에서 다룬다.
 
 ## 기본 원칙
 
@@ -65,6 +65,7 @@ aidev-kedp001/
 | AI Agent 규칙 | `.claude/CLAUDE.md` |
 | 공통 규칙 | `specification/00.common/README.md` |
 | 지표와 API 조사 결과 | `specification/10.indicators/README.md` |
+| 화면 명세 | `specification/50.web/README.md` |
 | 결정 기록 | `records/07.decision/decisions/` |
 | 안내서 | `docs/` |
 | 작업 목록 | GitHub Issues |
@@ -77,6 +78,3 @@ clone 뒤 키 보호 설정과 `.env` 준비가 필요하다. `docs/key-protecti
 
 - DB 물리 스키마
 - ECOS·KOSIS·공공데이터포털 저장 방식
-- 데이터 수집 주기
-- 관리자 화면 상세 범위
-- 첫 공개 지표 수
