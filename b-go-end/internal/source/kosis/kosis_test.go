@@ -145,6 +145,18 @@ func TestDataURL(t *testing.T) {
 	}
 }
 
+func TestGetMetaURL(t *testing.T) {
+	got := getMetaURL("TESTKEY", "DT_1DA7001S", "ITM")
+	want := "https://kosis.kr/openapi/statisticsData.do?apiKey=TESTKEY&format=json&jsonVD=Y&method=getMeta&orgId=101&tblId=DT_1DA7001S&type=ITM"
+	if got != want {
+		t.Errorf("getMetaURL = %s", got)
+	}
+	_, err := New("", fetch.New(0)).FetchMeta(t.Context(), "DT_1DA7001S", "ITM")
+	if err == nil || !strings.Contains(err.Error(), "KOSIS_API_KEY") {
+		t.Errorf("FetchMeta without key: err = %v", err)
+	}
+}
+
 // 샘플 파일에 키 자리 문자열이 그대로 남지 않았는지 확인한다.
 func TestSamplesHaveNoKey(t *testing.T) {
 	sourcetest.CheckMasked(t, sampleDir, "apiKey=")

@@ -86,7 +86,7 @@ type Indicator struct {
 	Source   string `yaml:"source"`
 	StatCode string `yaml:"stat_code"`
 	ItemCode string `yaml:"item_code"`
-	// Classes는 분류 코드다. KOSIS는 objL1, objL2… 순서로 넣는다. ECOS는 비워 둔다.
+	// Classes는 분류 코드다. KOSIS는 objL1, objL2… 순서로 넣는다. ECOS는 ITEM_CODE2, ITEM_CODE3… 순서로 넣는다(지금 등록된 ECOS 지표는 비워 둔다).
 	Classes []string `yaml:"classes"`
 	// Cycle은 제공처 요청에 넣는 주기 값 그대로다(ECOS A/Q/M/D, KOSIS Y/Q/M).
 	Cycle string `yaml:"cycle"`

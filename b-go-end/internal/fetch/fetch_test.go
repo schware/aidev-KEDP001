@@ -78,6 +78,47 @@ func TestGetMasksLogAndErrors(t *testing.T) {
 	}
 }
 
+func TestRecorder(t *testing.T) {
+	captureLog(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/bad") {
+			http.Error(w, `{"err":"bad"}`, http.StatusForbidden)
+			return
+		}
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+	c := New(time.Second, key)
+
+	var got []Exchange
+	ctx := WithRecorder(context.Background(), func(e Exchange) { got = append(got, e) })
+	if _, err := c.Get(ctx, srv.URL+"/api/"+key+"/ok"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Get(ctx, srv.URL+"/api/"+key+"/bad"); err == nil {
+		t.Fatal("want status error")
+	}
+	if len(got) != 2 {
+		t.Fatalf("recorded %d, want 2", len(got))
+	}
+	if got[0].Status != http.StatusOK || string(got[0].Body) != `{"ok":true}` || got[0].ReceivedAt.IsZero() {
+		t.Errorf("ok = %+v", got[0])
+	}
+	if got[1].Status != http.StatusForbidden || !strings.Contains(string(got[1].Body), `"err"`) {
+		t.Errorf("bad = %+v", got[1])
+	}
+	for _, e := range got {
+		if strings.Contains(e.URL, key) || !strings.Contains(e.URL, "/api/***/") {
+			t.Errorf("url not masked: %s", e.URL)
+		}
+	}
+
+	// recorder가 없는 ctx는 그대로 동작한다.
+	if _, err := c.Get(context.Background(), srv.URL+"/ok"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSave(t *testing.T) {
 	dir := t.TempDir()
 	c := New(time.Second, key)
