@@ -1,10 +1,10 @@
-# DB 설계서 초안
+# DB 설계서
 
-- 상태: draft
-- 근거 결정: KEDP001-D002(기술 구성), KEDP001-D004(API 조사 뒤 스키마 결정), KEDP001-D017(MVP 범위), KEDP001-D018(관리자 화면), KEDP001-D019(수집 주기), KEDP001-D020(운영 최소 기준)
-- 근거 자료: `specification/10.indicators/README.md`, `specification/50.web/README.md`, `b-go-end/config/indicators.yaml`, `samples/`
-- 이 문서는 초안이다. 저장 방식과 규칙은 소유자가 정한다. DDL과 migration은 결정 뒤에 쓴다.
-- 샘플로 확인하지 못한 것은 "확인 못 함"으로 적고 6장 질문에 넣었다.
+- 상태: decided (KEDP001-D022, 2026-10-26)
+- 근거 결정: KEDP001-D002(기술 구성), KEDP001-D004(API 조사 뒤 스키마 결정), KEDP001-D017(MVP 범위), KEDP001-D018(관리자 화면), KEDP001-D019(수집 주기), KEDP001-D020(운영 최소 기준), KEDP001-D021(Go 수집 모듈), KEDP001-D022(DB 저장 방식과 데이터 저장 규칙)
+- 근거 자료: `specification/10.indicators/README.md`, `specification/50.web/README.md`, `b-go-end/config/indicators.yaml`, `samples/`, `samples/repository/16-period/`
+- 저장 방식과 규칙은 KEDP001-D022로 확정했다(6장). 테이블 정의는 `b-sql-db/migrations/`를 따른다(4장).
+- 아직 할 일은 7장에 둔다.
 
 ---
 
@@ -21,26 +21,30 @@
 | 공공데이터포털 | `samples/data-go-kr/069500-D-20260901-20261022.json` | KODEX 200 | D | 34 |
 | 공공데이터포털 | `samples/data-go-kr/122630-D-20260901-20261022.json` | KODEX 레버리지 | D | 34 |
 | 공공데이터포털 | `samples/data-go-kr/114800-D-20260901-20261022.json` | KODEX 인버스 | D | 34 |
+| ECOS | `samples/repository/16-period/ecos/722Y001-0101000-A-2023-2025.json` | 기준금리 | A | 3 |
+| ECOS | `samples/repository/16-period/ecos/722Y001-0101000-Q-2025Q1-2025Q3.json` | 기준금리 | Q | 3 |
+| ECOS | `samples/repository/16-period/ecos/722Y001-0101000-D-20261001-20261023.json` | 기준금리 | D | 23 |
+| KOSIS | `samples/repository/16-period/kosis/DT_1DA7001S-T90-0-Q-202401-202402.json` | 고용률 | Q | 2 |
 
 오류·데이터 없음 샘플: `samples/ecos/error-INFO-100.json`, `error-INFO-200.json`, `samples/kosis/error-11.json`, `error-30.json`, `samples/data-go-kr/error-30.json`, `nodata-totalCount-0.json`
 
-CPI, GDP, 외환보유액(MVP 처음 화면 지표)은 아직 샘플이 없다(`10.indicators`에서 pending).
+- `samples/repository/16-period/`는 기간 형식을 확인하려고 2026-10-26에 받은 조사 샘플이다(`b-go-end/cmd/sample`). 파일마다 요청 정보(`*.request.json`)가 옆에 있다. 조사 샘플은 git에 올리지 않는다(`.claude/environment.md`).
+- CPI, GDP, 외환보유액(MVP 처음 화면 지표)은 아직 샘플이 없다(7장 남은 일 20).
 
 ## 1.2 비교표
 
 | 구분 | ECOS | KOSIS | 공공데이터포털 |
 | --- | --- | --- | --- |
 | 응답 모양 | `StatisticSearch.row` 배열, `list_total_count` | 최상위가 행 배열 | `response.body.items.item` 배열, `totalCount` |
-| 값 key | `DATA_VALUE` | `DT` | 한 행에 값이 여러 개(`clpr`, `nav`, `mkp`, `hipr`, `lopr`, `vs`, `fltRt`, `trqu` 등). 지표로 쓸 값은 미정 |
+| 값 key | `DATA_VALUE` | `DT` | 한 행에 값이 여러 개(`clpr`, `nav`, `mkp`, `hipr`, `lopr`, `vs`, `fltRt`, `trqu` 등). 지표 값은 `clpr`만 쓴다(결정 8) |
 | 값 형식 | 문자열. `"3.5"`, `"3"` (소수 자릿수가 행마다 다름) | 문자열. `"61"`, `"61.6"`, `"51069375"` | 문자열. `"86525"`, `"86756.18"`, `fltRt`는 `".25"`, `"-.39"`(앞 0 없음) |
-| 빈 값·결측 | 샘플에 없음 → 확인 못 함 | 샘플에 없음 → 확인 못 함 | 샘플에 없음 → 확인 못 함 |
-| 단위 | `UNIT_NAME` (`연%`) | `UNIT_NM` (`%`, `명`). 출생아 수 표는 `UNIT_NM` 없음, `C1_NM`(`출생아수(명)`)에 들어 있음 | 단위 항목 없음. 원(KRW)으로 보이나 → 확인 못 함 |
+| 빈 값·결측 | 샘플에 없음. 저장 규칙은 5.5 | 샘플에 없음. 저장 규칙은 5.5 | 샘플에 없음. 저장 규칙은 5.5 |
+| 단위 | `UNIT_NAME` (`연%`) | `UNIT_NM` (`%`, `명`). 출생아 수 표는 `UNIT_NM` 없음, `C1_NM`(`출생아수(명)`)에 들어 있음 | 단위 항목 없음. 관리자가 단위를 넣는다(결정 9) |
 | 기간 key | `TIME` | `PRD_DE` | `basDt` |
-| 기간 형식 | M: `202401` | M: `202401`, A: `2015` | D: `20261022` |
-| 주기 표시 | 응답에 없음(요청 경로에만 `M`) | `PRD_SE` (`M`, `A`). 요청 `prdSe=Y`가 응답에서 `A` | 응답에 없음. 일만 있음 |
-| 분기·연 형식 | 확인 못 함(ECOS A·Q 샘플 없음) | Q 샘플 없음 → 확인 못 함 | 해당 없음 |
+| 기간 형식 | D: `20261001`, M: `202401`, Q: `2025Q1`, A: `2023` | M: `202401`, Q: `202401`(끝 두 자리가 분기), A: `2015` | D: `20261022` |
+| 주기 표시 | 응답에 없음(요청 경로에만 있음) | `PRD_SE` (`M`, `Q`, `A`). 요청 `prdSe=Y`가 응답에서 `A` | 응답에 없음. 일만 있음 |
 | 행 순서 | 오래된 것부터 | 오래된 것부터 | 최근 것부터 |
-| 분류 | `ITEM_CODE1`~`4`(샘플은 1만 값, 2~4는 null) | `C1`(objL1), 이름 `C1_NM`, 분류 이름 `C1_OBJ_NM`. C2 이상은 샘플 없음 → 확인 못 함 | 없음. 종목 코드 `srtnCd`가 곧 계열 |
+| 분류 | `ITEM_CODE1`~`4`(샘플은 1만 값, 2~4는 null) | `C1`(objL1), 이름 `C1_NM`, 분류 이름 `C1_OBJ_NM`. C2 이상은 샘플 없음(7장 남은 일 19) | 없음. 종목 코드 `srtnCd`가 곧 계열 |
 | 이름 | `STAT_NAME`, `ITEM_NAME1` | `TBL_NM`, `ITM_NM`, `C1_NM` (+ `_ENG`) | `itmsNm`, `bssIdxIdxNm` |
 | 변경 일자 | 없음 | `LST_CHN_DE` (예: `2024-02-01`, 행마다 다름) | 없음 |
 | 논리 key 후보 | `STAT_CODE` + `ITEM_CODE1`(~4) + 주기 + `TIME` | `ORG_ID` + `TBL_ID` + `ITM_ID` + `C1` + `PRD_SE` + `PRD_DE` | `srtnCd` + `basDt` (+ 값 항목 이름) |
@@ -51,9 +55,9 @@ CPI, GDP, 외환보유액(MVP 처음 화면 지표)은 아직 샘플이 없다(`
 
 - 세 곳 모두 **한 행 = 한 기간의 값**이다. 기간, 값, 단위, 계열 식별자로 정리하면 같은 모양이 된다.
 - 계열 식별자 구성은 제공처마다 다르다(ECOS 2~5개, KOSIS 4개 이상, 공공데이터포털 1개). 이 차이는 "지표 정의" 쪽에 두고, 관측값 쪽은 공통으로 둘 수 있다.
-- 공공데이터포털은 한 행에 값이 여러 개다. 지표 하나에 값 하나를 고르거나, 여러 값을 따로 저장해야 한다.
-- 단위는 제공처마다 표기가 다르고(`연%`, `%`), 없는 경우도 있다. 응답 단위만으로는 화면 단위를 정할 수 없다.
-- 값 변경을 알 수 있는 단서는 KOSIS `LST_CHN_DE`뿐이다. 이것이 "처음 공표일"인지 "마지막 수정일"인지는 샘플만으로 구분할 수 없다 → 확인 못 함.
+- 공공데이터포털은 한 행에 값이 여러 개다. 지표 값은 `clpr`만 쓰고 나머지는 원본 응답에 남긴다(결정 8).
+- 단위는 제공처마다 표기가 다르고(`연%`, `%`), 없는 경우도 있다. 응답 단위만으로는 화면 단위를 정할 수 없으므로 관리자 단위를 둔다(결정 9).
+- 값 변경을 알 수 있는 단서는 KOSIS `LST_CHN_DE`뿐이다. 이것이 "처음 공표일"인지 "마지막 수정일"인지는 샘플만으로 구분할 수 없다. 이력(5.2)은 이 값과 상관없이 값을 비교해 남기므로 따로 확인하지 않는다(KEDP001-D022 5절 17).
 
 ---
 
@@ -69,7 +73,7 @@ CPI, GDP, 외환보유액(MVP 처음 화면 지표)은 아직 샘플이 없다(`
 | 수집 시각 (기본 06:00, Asia/Seoul) | D019(수집 시각 설정은 DB에 저장) |
 | 수집한 관측값 (지표, 기간, 값) | D017(수집 → 저장 → 조회) |
 | 수집 실행 기록 (마지막 수집 일시, 성공·실패) | D018(API 관리 화면에 마지막 수집 일시), D019(상세 화면에 마지막 수집 일시) |
-| 원본 응답 | 저장 여부는 미정. 5.3과 6장 질문 |
+| 원본 응답 (오류·데이터 없음 포함, 90일 보관) | 결정 5, 6, 13 (5.3) |
 
 ## 2.2 저장하지 않을 것
 
@@ -95,55 +99,88 @@ CPI, GDP, 외환보유액(MVP 처음 화면 지표)은 아직 샘플이 없다(`
 | 혼합 | 지표 정의는 공통 테이블에, 제공처별 식별자는 지표 정의의 칼럼(또는 jsonb)으로. 관측값은 공통 테이블 | 조회는 범용처럼 단순하다. 제공처 차이는 지표 정의 한 곳에 모인다 | 지표 정의 칼럼 중 일부는 제공처에 따라 비어 있다. 어떤 칼럼을 공통으로 둘지 정해야 한다 |
 | Staging-Result | 받은 응답을 그대로 담는 staging, 정리·검증한 결과를 담는 result로 나눈다 | 원본이 남아 재처리·검증·감사가 쉽다. Rust의 정규화·검증 역할(D002)과 맞는다 | 테이블과 처리 단계가 늘어난다. 원본 보관 기간, 용량 관리가 필요하다. MVP에는 무겁다 |
 
-## 추천: 혼합 (원본 응답은 따로 보관)
+## 결정: 혼합 (원본 응답은 따로 보관, 결정 1)
 
 - 관측값 테이블은 범용으로 하나만 둔다. 화면(대시보드, 상세)은 지표 하나의 시계열만 읽으면 된다(D017).
 - 제공처별 식별자(통계 코드, 항목 코드, 분류)는 지표 정의 테이블에 둔다. 1.3에서 본 것처럼 제공처 차이는 여기에만 있다.
-- Staging-Result를 다 하지 않고, 원본 응답만 별도 테이블에 남긴다. 재처리가 필요할 때 다시 쓸 수 있고, 수집 단계를 늘리지 않는다. 원본 보관 여부는 5.3에서 소유자가 정한다.
-- 관측값 수는 적다. 10개 지표, 하루 1회 수집(D019)이며 가장 많은 일 주기도 연 250행 안팎이다. 테이블을 나눌 이유가 성능에서 나오지 않는다.
+- Staging-Result를 다 하지 않고, 원본 응답만 별도 테이블에 남긴다. 재처리가 필요할 때 다시 쓸 수 있고, 수집 단계를 늘리지 않는다(5.3).
+- 관측값 수는 적다. 10개 지표, 하루 1회 수집(D019)이며 일 주기도 지표 하나에 연 366행 이하다(ETF는 거래일만 와서 연 250행 안팎). 테이블을 나눌 이유가 성능에서 나오지 않는다.
 
 ---
 
-# 4. 추천안 기준 테이블 초안
+# 4. 테이블
 
-이름과 칼럼은 초안이다. 칼럼 타입은 방향만 적었다. DDL은 쓰지 않는다.
+정의는 `b-sql-db/migrations/0001_schema.up.sql`이 기준이다. 아래는 칼럼의 뜻과 규칙만 적는다.
 
 | 테이블 | 역할 | 주요 칼럼 |
 | --- | --- | --- |
-| `source` | 제공처 목록 | `code`(`ecos`, `kosis`, `data-go-kr`), `name` |
-| `indicator` | 지표 정의. `indicators.yaml`을 대신한다 | `id`(예: `ecos-base-rate`, 화면 주소 `/indicator/{id}`에도 사용), `name`, `source_code`, `stat_code`, `item_code`(공공데이터포털은 비움), `classes`(KOSIS objL1… 배열), `org_id`(KOSIS), `value_field`(공공데이터포털에서 쓸 값, 예: `clpr`), `cycle`(D/M/Q/A), `unit`(화면 단위), `source_unit`(응답 단위), `created_at`, `updated_at` |
-| `indicator_display` | 화면 설정 (Dashboard 관리) | `indicator_id`, `is_visible`, `sort_order`, `chart_period`, `number_format`(자릿수, 소수점), `date_format`, `notice`(레버리지·인버스 안내 문구 여부 또는 내용) |
-| `indicator_relation` | 관련 지표 | `indicator_id`, `related_indicator_id`, `sort_order` |
-| `app_setting` | 전체 설정 | `key`(예: `collect_time`), `value`(예: `06:00`), `updated_at` |
-| `observation` | 관측값 (화면이 읽는 값) | `indicator_id`, `cycle`, `period_start`(date, 5.1), `period_raw`(응답 원문, 예: `202401`), `value`(numeric), `value_raw`(응답 문자열), `source_changed_at`(KOSIS `LST_CHN_DE`, 다른 곳은 비움), `collected_at`, `run_id`. 유일 조건 후보: `indicator_id` + `cycle` + `period_start` |
-| `observation_history` | 고쳐진 값의 이전 값 (5.2에서 "이력"을 고를 때만) | `indicator_id`, `cycle`, `period_start`, `old_value`, `new_value`, `changed_at`, `run_id` |
-| `collection_run` | 수집 실행 기록. 마지막 수집 일시와 연결 상태의 근거 | `id`, `source_code`, `indicator_id`, `started_at`, `finished_at`, `status`(성공, 데이터 없음, 오류), `error_code`(예: `INFO-100`, `11`, `30`), `row_count`, `trigger`(예약, 수동) |
-| `raw_response` | 원본 응답 (5.3에서 "보관"을 고를 때만) | `run_id`, `received_at`, `request_masked`(키 자리 `***`), `http_status`, `body`(jsonb) |
+| `source` | 제공처 목록 | `code`(`ecos`, `kosis`, `data-go-kr`), `name`. migration이 세 행을 넣는다 |
+| `indicator` | 지표 정의. `indicators.yaml`을 대신한다 | `id`(예: `ecos-base-rate`, 화면 주소 `/indicator/{id}`에도 사용. 소문자·숫자·`-`만), `name`, `source_code`, `org_id`(KOSIS), `stat_code`, `item_code`(공공데이터포털은 비움), `classes`(text 배열, KOSIS objL1…), `value_field`(공공데이터포털 값 항목, `clpr`), `cycle`(D/M/Q/A), `unit`(관리자 단위), `source_unit`(응답 단위), `created_at`, `updated_at` |
+| `indicator_display` | 화면 설정 (Dashboard 관리) | `indicator_id`, `is_visible`(기본 꺼짐), `sort_order`, `chart_period`(interval, 예: `10 years`), `number_format`(jsonb), `date_format`, `notice`(안내 문구, 없으면 비움) |
+| `indicator_relation` | 관련 지표 | `indicator_id`, `related_indicator_id`, `sort_order`. 자기 자신은 넣지 못한다 |
+| `app_setting` | 전체 설정 | `key`, `value`, `updated_at`. migration이 `collect_time` = `06:00`(Asia/Seoul, KEDP001-D019)을 넣는다 |
+| `collection_run` | 수집 실행 기록. 마지막 수집 일시와 연결 상태의 근거 | `id`, `source_code`, `indicator_id`(제공처 전체 실행이면 비움), `started_at`, `finished_at`, `status`(`running`, `success`, `no_data`, `error`), `error_code`(예: `INFO-100`, `11`, `30`), `row_count`, `trigger`(`schedule`, `manual`) |
+| `observation` | 관측값 (화면이 읽는 값) | `indicator_id`, `cycle`, `period_start`(date, 5.1), `period_raw`(응답 원문), `value`(numeric), `value_raw`(응답 문자열), `source_changed_at`(KOSIS `LST_CHN_DE`, 다른 곳은 비움), `collected_at`, `run_id`. 기본 키: `indicator_id` + `cycle` + `period_start` |
+| `observation_history` | 고쳐진 값의 이전 값 (5.2) | `id`, `indicator_id`, `cycle`, `period_start`, `old_value`, `new_value`, `changed_at`, `run_id`(새 값을 가져온 수집) |
+| `raw_response` | 원본 응답 (5.3) | `id`, `run_id`, `received_at`, `request_masked`(키 자리 `***`), `http_status`, `body`(jsonb), `body_text`(JSON이 아닌 응답) |
 
 참고:
 
 - 마지막 수집 일시는 `collection_run`에서 구한다. 따로 칼럼을 두지 않는다.
 - 시각 칼럼은 timestamptz로 두고, 화면 표시는 Asia/Seoul로 한다.
-- `observation`에 `cycle`을 넣은 이유: D018에서 지표의 수집 주기를 관리자가 바꿀 수 있으므로, 같은 지표에 다른 주기의 값이 섞일 수 있다.
+- `observation`에 `cycle`을 넣은 이유: 관리자가 지표의 수집 주기를 바꿀 수 있고, 이전 주기 값은 남긴다(결정 11).
+- `indicator`는 제공처마다 꼭 필요한 칸을 검사한다: ECOS는 `item_code`, KOSIS는 `org_id`와 `item_code`, 공공데이터포털은 `value_field`가 있어야 하고 `item_code`는 비어야 한다.
+- `collection_run.status`의 `running`은 수집을 시작했고 아직 끝나지 않은 상태다. `running`일 때만 `finished_at`이 비어 있다.
+- 지표를 지울 때: 관측값이 있으면 지울 수 없다. 화면 설정과 관련 지표는 함께 지워지고, 수집 기록의 `indicator_id`는 비워진다.
+- `number_format`의 내용(자릿수, 소수점)은 화면 작업에서 정한다.
+
+## 4.1 접속 계정과 권한 (결정 14)
+
+정의는 `b-sql-db/migrations/0002_roles.up.sql`이 기준이다. 비밀번호는 저장소에 쓰지 않는다. migration을 적용한 뒤 소유자가 psql의 `\password`로 정한다.
+
+| 계정 | 쓰기 | 읽기만 |
+| --- | --- | --- |
+| `kedp_go` | `indicator`, `indicator_display`, `indicator_relation`, `app_setting`(추가·수정·삭제), `collection_run`(추가·수정) | `source`, `observation`(조회 API) |
+| `kedp_rust` | `observation`(추가·수정), `observation_history`(트리거가 추가), `raw_response`(추가) | `source`, `indicator` |
+
+- `kedp_rust`는 `observation`, `raw_response`도 읽을 수 있다(덮어쓰기와 재처리).
+- 테이블을 만들고 고치는 일(migration)은 소유자 계정으로 한다.
 
 ---
 
-# 5. 정해야 할 규칙
+# 5. 저장 규칙
 
-## 5.1 기간 표기 통일
+## 5.1 기간 표기 통일 (결정 2, 3)
 
-| 주기 | ECOS | KOSIS | 공공데이터포털 | 통일안 (`period_start`) |
+| 주기 | ECOS | KOSIS | 공공데이터포털 | `period_start` |
 | --- | --- | --- | --- | --- |
-| D | 확인 못 함 | 해당 없음 | `20261022` | `2026-10-22` |
-| M | `202401` | `202401` | 해당 없음 | `2024-01-01` |
-| Q | 확인 못 함 | 확인 못 함 | 해당 없음 | 분기 첫날 (예: `2024-04-01`) |
-| A | 확인 못 함 | `2015` | 해당 없음 | `2015-01-01` |
+| D | `20261001` | 해당 없음 | `20261022` | 그 날 (`2026-10-01`) |
+| M | `202401` | `202401` | 해당 없음 | 그 달 1일 (`2024-01-01`) |
+| Q | `2025Q1`, `2025Q2`, `2025Q3` | `202401`, `202402` (끝 두 자리가 분기) | 해당 없음 | 분기 첫날 (`2025Q2` → `2025-04-01`, KOSIS `202402` → `2024-04-01`) |
+| A | `2023` | `2015` | 해당 없음 | 1월 1일 (`2023-01-01`) |
 
-- 추천: 기간 시작일(date) + 주기 + 응답 원문을 함께 저장한다. 날짜로 정렬·범위 조회가 쉽고, 원문으로 되돌아갈 수 있다.
-- 주기 코드는 `A`로 통일하는 것을 추천한다. 화면 명세(D/M/Q/A)와 KOSIS 응답(`A`)이 같다. `indicators.yaml`의 KOSIS `Y`는 요청 값이다.
-- ECOS 연·분기, KOSIS 분기 형식은 샘플을 받아 확인해야 한다.
+근거 파일:
 
-## 5.2 값이 고쳐졌을 때
+- ECOS D: `samples/repository/16-period/ecos/722Y001-0101000-D-20261001-20261023.json` (`TIME` `20261001`~`20261023`)
+- ECOS M: `samples/ecos/722Y001-0101000-M-202401-202609.json`
+- ECOS Q: `samples/repository/16-period/ecos/722Y001-0101000-Q-2025Q1-2025Q3.json` (`TIME` `2025Q1`~`2025Q3`)
+- ECOS A: `samples/repository/16-period/ecos/722Y001-0101000-A-2023-2025.json` (`TIME` `2023`~`2025`)
+- KOSIS M: `samples/kosis/DT_1DA7001S-T90-0-M-202401-202609.json`
+- KOSIS Q: `samples/repository/16-period/kosis/DT_1DA7001S-T90-0-Q-202401-202402.json` (`PRD_SE` `Q`, `PRD_DE` `202401`, `202402`)
+- KOSIS A: `samples/kosis/DT_1IN1502-T100-00-Y-2015-2025.json`
+- 공공데이터포털 D: `samples/data-go-kr/069500-D-20260901-20261022.json`
+
+규칙:
+
+- 기간 시작일(date), 주기, 응답 원문을 함께 저장한다(결정 2).
+- 연 주기 코드는 `A`다. KOSIS 요청 값 `Y`는 요청할 때만 쓴다(결정 3).
+- KOSIS는 M과 Q가 둘 다 6자리다. 원문만으로는 구분할 수 없으므로 주기(응답 `PRD_SE`)를 함께 보고 바꾼다.
+- KOSIS 분기 `202402`가 2분기라는 것은 값으로 확인했다. 분기 값 `63.3`은 월 샘플의 2024년 4~6월 평균(`63.0`, `63.5`, `63.5` → 63.33)과 같고, 2월 값 `61.6`과 다르다.
+- 요청 값도 응답과 같은 형식이다. ECOS 분기는 `2025Q1`, KOSIS 분기는 `startPrdDe=202401`로 요청했다(샘플 옆 `*.request.json`).
+- ECOS 일 자료는 주말에도 행이 온다(기준금리 2026-10-01~23 요청에 23행).
+- DB는 `period_start`가 주기의 첫날인지 검사한다(`observation_period_start_check`). 일 주기는 검사하지 않는다.
+
+## 5.2 값이 고쳐졌을 때 (결정 4)
 
 같은 지표·주기·기간의 값이 다시 수집됐는데 값이 다를 때.
 
@@ -153,10 +190,11 @@ CPI, GDP, 외환보유액(MVP 처음 화면 지표)은 아직 샘플이 없다(`
 | B. 덮어쓰기 + 이력 | `observation`은 새 값, 이전 값은 `observation_history`에 | 화면 조회는 단순하고, 바뀐 기록이 남는다. 테이블 하나가 늘어난다 |
 | C. 모두 쌓기 | 수집마다 행을 더하고 최신 것을 읽는다 | 기록이 완전하다. 조회가 복잡하고 행이 매일 늘어난다 |
 
-- 추천: B. 값이 실제로 달라졌을 때만 이력에 남긴다.
-- 실제로 값이 고쳐지는지는 세 곳 모두 확인 못 함. KOSIS `LST_CHN_DE`가 단서지만 뜻이 확인되지 않았다.
+- 결정: B. 값이 실제로 달라졌을 때만 이력에 남긴다.
+- 이력은 `observation`의 트리거(`observation_keep_history`)가 남긴다. Rust는 `observation`만 덮어쓴다(`INSERT … ON CONFLICT … DO UPDATE`).
+- 값은 숫자로 비교한다. `3.5`를 `3.50`으로 다시 쓰면 이력이 남지 않는다.
 
-## 5.3 원본 응답 보관
+## 5.3 원본 응답 보관 (결정 5, 6, 13)
 
 | 선택지 | 내용 |
 | --- | --- |
@@ -164,52 +202,60 @@ CPI, GDP, 외환보유액(MVP 처음 화면 지표)은 아직 샘플이 없다(`
 | B. DB `raw_response`(jsonb)에 보관 | 재처리·확인 가능. 크기는 샘플 기준 한 번에 수 KB~13KB |
 | C. 파일로 보관 | DB가 가볍다. 백업(D020)과 따로 관리해야 한다 |
 
-- 추천: B. 보관 기간은 정해야 한다(예: 90일 뒤 삭제 또는 전부 보관).
-- 요청 주소는 키를 가린 형태로만 저장한다(`.claude/api.md`).
-- 오류 응답도 함께 남길지 정해야 한다. 추천: 남긴다(오류 코드 확인용).
+- 결정: B. 90일 보관한다. 지우는 작업은 MVP 이후에 만들고, 그때까지는 쌓기만 한다(KEDP001-D022 영향). `received_at` 색인을 둔다.
+- 오류·데이터 없음 응답도 수집 기록과 함께 남긴다.
+- 요청 주소는 키를 가린 형태로만 저장한다(`.claude/api.md`). DB는 `request_masked`에 `***`가 있는지 검사한다.
+- JSON 응답은 `body`(jsonb), JSON이 아닌 응답(예: 게이트웨이 오류 문서)은 `body_text`에 넣는다. 둘 중 하나만 쓴다.
 
-## 5.4 DB에 쓰는 쪽
+## 5.4 DB에 쓰는 쪽 (결정 7)
 
-| 데이터 | 선택지 | 추천 |
+| 데이터 | 쓰는 쪽 | 이유 |
 | --- | --- | --- |
-| 관측값, 원본 응답 | Go가 쓴다 / Rust가 쓴다 | Rust. D002 구조가 `Rust Processor → PostgreSQL`이고, 정규화·검증한 쪽이 바로 쓰는 것이 단순하다 |
-| 수집 실행 기록 | Go / Rust | Go. 예약 실행(D019)과 오류 응답 판정이 Go에 있다. 단 Rust의 저장 결과(행 수, 실패)를 gRPC 응답으로 받아야 한다 |
-| 지표 정의, 화면 설정, 수집 시각 | Go | Go. 관리자 화면 API가 Go에 있다(D002, D018) |
+| 관측값, 원본 응답 | Rust | D002 구조가 `Rust Processor → PostgreSQL`이고, 정규화·검증한 쪽이 바로 쓰는 것이 단순하다 |
+| 수집 실행 기록 | Go | 예약 실행(D019)과 오류 응답 판정이 Go에 있다. Rust의 저장 결과(행 수, 실패)는 gRPC 응답으로 받는다 |
+| 지표 정의, 화면 설정, 수집 시각 | Go | 관리자 화면 API가 Go에 있다(D002, D018) |
 
-- Go와 Rust가 둘 다 DB에 쓰면 접속 계정과 권한을 나눌지 정해야 한다.
-- 원본 응답을 Rust가 저장하려면 Go가 응답 원문을 gRPC로 넘겨야 한다. `b-proto/` 변경이 필요할 수 있다(Go·Rust 담당과 소유자 승인).
-- D020: Rust가 멈추면 Go도 멈춘다. Rust가 쓰는 쪽이 되면 Rust가 멈췄을 때 관측값 저장이 멈춘다. MVP에서는 받아들이는 것으로 보인다.
+- 계정과 권한은 4.1과 같다.
+- Rust가 원본 응답을 저장하려면 Go가 응답 원문을 gRPC로 넘겨야 한다. `b-proto/` 변경이 필요하며 소유자 승인 뒤 바꾼다(KEDP001-D007).
+- Rust가 멈추면 관측값 저장도 멈춘다. MVP에서는 받아들인다(KEDP001-D020).
+
+## 5.5 빈 값(결측) (결정 15)
+
+- 결측은 관측값으로 저장하지 않는다. 원본 응답에는 남는다.
+- `observation.value`는 numeric이고 비울 수 없다. 비었거나 숫자로 바꿀 수 없는 값은 들어갈 수 없다.
+- 결측이 어떤 표기(`""`, `"-"`, null 등)로 오는지는 아직 샘플로 보지 못했다.
 
 ---
 
-# 6. 소유자가 판단할 질문
+# 6. 결정 (KEDP001-D022)
 
-| # | 질문 | 선택지 | 추천 |
+| # | 정할 것 | 결정 |
+| --- | --- | --- |
+| 1 | 저장 방식 | 혼합. 지표 정의 테이블 하나에 제공처별 코드를 두고, 관측값 테이블 하나에 세 제공처를 담는다. 원본 응답은 따로 둔다 (3장) |
+| 2 | 기간 저장 | 기간 시작일(date)과 응답 원문을 함께 저장한다 (5.1) |
+| 3 | 연 주기 코드 | `A`. KOSIS 요청 값 `Y`는 요청할 때만 쓴다 (5.1) |
+| 4 | 값이 고쳐졌을 때 | 덮어쓰고 이전 값은 이력에 남긴다. 값이 실제로 달라졌을 때만 남긴다 (5.2) |
+| 5 | 원본 응답 | DB에 보관한다. 요청 주소는 키를 가린 형태로만 저장한다 (5.3) |
+| 6 | 원본 보관 기간 | 90일 (5.3) |
+| 7 | DB에 쓰는 쪽 | 관측값·원본 응답은 Rust, 수집 기록·지표 정의·화면 설정·수집 시각은 Go (5.4) |
+| 8 | 공공데이터포털 값 | 종가(`clpr`)만 지표 값으로 쓴다. 나머지는 원본 응답에 남는다 |
+| 9 | 화면 단위 | 응답 단위와 관리자 단위를 둘 다 저장하고 관리자 값을 우선한다 |
+| 10 | 값 저장 형식 | numeric과 응답 원문 문자열을 함께 저장한다 |
+| 11 | 관리자가 주기를 바꿨을 때 | 이전 주기 값은 남긴다. 관측값에 주기를 함께 저장한다 |
+| 12 | 처음 수집할 과거 범위 | 지표의 차트 기간만큼 (`indicator_display.chart_period`) |
+| 13 | 오류·데이터 없음 응답 | 수집 기록과 원본 응답을 모두 저장한다 (5.3) |
+| 14 | DB 접속 계정 | Go와 Rust를 나눈다. 비밀번호는 저장소에 쓰지 않는다 (4.1) |
+| 15 | 빈 값(결측) | 관측값으로 저장하지 않는다. 원본 응답에는 남는다 (5.5) |
+
+"확인 못 함"으로 두었던 16~22는 KEDP001-D022 5절에서 정했다. 16(기간 형식)은 5.1에 채웠다. 17·18·21·22는 DB 설계에서 더 확인하지 않으므로 지웠다. 19·20은 7장에 둔다.
+
+---
+
+# 7. 남은 일
+
+DB 설계에서는 다루지 않고 남겨 둔 것이다(KEDP001-D022 5절).
+
+| # | 항목 | 결정 | 지금 스키마 |
 | --- | --- | --- | --- |
-| 1 | 저장 방식 | 제공처별 / 범용 / 혼합 / Staging-Result | 혼합 + 원본 응답 별도 보관 (3장) |
-| 2 | 기간 저장 형식 | 원문 문자열만 / 시작일 date만 / 시작일 + 원문 | 시작일 + 원문 (5.1) |
-| 3 | 연 주기 코드 | `A` / `Y` | `A` (화면 명세, KOSIS 응답과 같음) |
-| 4 | 값이 고쳐졌을 때 | 덮어쓰기 / 덮어쓰기 + 이력 / 모두 쌓기 | 덮어쓰기 + 이력 (5.2) |
-| 5 | 원본 응답 보관 | 안 함 / DB / 파일 | DB, 보관 기간을 정함 (5.3) |
-| 6 | 원본 보관 기간 | 90일 / 1년 / 전부 | 90일 (값 확인에 충분, 용량은 작아 전부 보관도 가능) |
-| 7 | 관측값을 DB에 쓰는 쪽 | Go / Rust | Rust (5.4) |
-| 8 | 공공데이터포털에서 지표로 쓸 값 | `clpr`만 / `clpr`·`nav` 등 여러 값을 각각 지표로 / 모든 값을 저장 | `clpr`만. 나머지는 원본 응답에 남는다 |
-| 9 | 화면 단위를 어디서 정하나 | 응답 단위 그대로 / 관리자가 지표마다 입력 / 둘 다 저장하고 관리자 값 우선 | 둘 다 저장, 관리자 값 우선 (출생아 수, ETF는 응답 단위가 없음) |
-| 10 | 값 저장 타입 | numeric / 문자열 / 둘 다 | numeric + 원문 문자열 |
-| 11 | 관리자가 지표 주기를 바꿨을 때 이전 주기 값 | 남김 / 지움 | 남김 (`observation`에 `cycle` 포함) |
-| 12 | 처음 수집할 때 과거 데이터 범위 | 차트 기간만큼 / 제공처가 주는 전부 / 고정 기간(예: 10년) | 차트 기간만큼 |
-| 13 | 오류·데이터 없음 응답 기록 | `collection_run`만 / 원본도 저장 | 원본도 저장 |
-| 14 | Go와 Rust의 DB 접속 계정 | 하나 / 나눔 | 나눔 (Rust: 관측값·원본, Go: 설정·실행 기록) |
-
-## 확인 못 함 (샘플이 더 필요)
-
-| # | 확인할 것 | 필요한 일 | 영향 |
-| --- | --- | --- | --- |
-| 15 | 빈 값·결측 표기 (`""`, `"-"`, null 등) | 결측이 있는 응답을 찾아 샘플로 남김 | `value`를 비워 둘지, 행을 건너뛸지 |
-| 16 | ECOS 연·분기·일, KOSIS 분기 기간 형식 | 해당 주기로 요청해 샘플 확보 | 5.1 변환 규칙 |
-| 17 | 값이 실제로 고쳐지는지, KOSIS `LST_CHN_DE`의 뜻 | 같은 요청을 날짜를 두고 다시 받아 비교 | 5.2 선택 |
-| 18 | 공공데이터포털 값의 단위 | 제공처 문서 확인 | 질문 9 |
-| 19 | KOSIS 분류가 2개 이상(`C2` 이상)인 표의 응답 | 다차원 표 샘플 확보 | `indicator.classes`, 논리 key |
-| 20 | CPI, GDP, 외환보유액 응답 (MVP 처음 화면 지표) | 항목 코드 확인 후 샘플 확보 (`10.indicators` pending) | 비교표 보완, 추천안이 그대로 맞는지 |
-| 21 | 1000행이 넘는 응답(페이지 나눔) | 긴 기간 요청으로 확인 | 처음 수집 범위(질문 12) |
-| 22 | 공공데이터포털 데이터 반영 시각 | 날마다 받아 비교 | 06:00 수집 때 전 거래일 값이 있는지 |
+| 19 | KOSIS 분류가 2개 이상(`C2` 이상)인 표 | 확인할 수 있는 표가 없어 다루지 않는다 | `indicator.classes`는 배열이라 분류 코드 개수와 상관없이 담는다 |
+| 20 | CPI, GDP, 외환보유액 | DB 설계를 위해 샘플을 더 받지 않는다. 항목 코드는 `10.indicators`에서 pending이다 | 다른 지표와 같은 테이블에 행으로 추가한다 |
