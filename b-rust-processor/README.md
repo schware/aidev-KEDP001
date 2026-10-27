@@ -84,8 +84,7 @@ CARGO_BUILD_JOBS=2 cargo test
 ./scripts/db-test.sh
 ```
 
-- 응답 읽기 테스트는 `samples/`의 제공처 폴더 샘플(정상, 오류, 데이터 없음)을 쓴다.
-- `samples/repository/`(조사 샘플, git 제외)로 하는 기간 확인 테스트(ECOS D·Q·A, KOSIS Q)는 기본으로 돌지 않는다. 파일이 있으면 `CARGO_BUILD_JOBS=2 cargo test repository -- --ignored`로 돌린다.
+- 응답 읽기와 기간 변환 테스트는 `samples/`의 제공처 폴더 샘플(정상, 오류, 데이터 없음, 설계서 5.1의 주기별 기간 형식)을 쓴다.
 - `db-test.sh`는 DB 컨테이너 `kedp-postgres`에서 superuser로 시험 DB를 만들고 migration과 `tests/fixtures.sql`을 넣는다. 테스트는 `.env`의 접속 값과 `kedp_rust` 비밀번호로 접속하며, DB 이름만 시험 DB로 바꾼다. 테스트는 DB 이름이 `kedp_rust_check`가 아니면 멈춘다.
 - `kedp_rust`는 `observation_history`를 읽을 수 없으므로, 트리거가 남긴 이력은 테스트 뒤에 superuser로 확인한다(`tests/check_history.sql`).
 

@@ -562,18 +562,13 @@ mod tests {
         }
     }
 
-    // 아래는 samples/repository/(조사 샘플, git 제외)의 파일로 기간 형식을 확인한다(설계서 5.1 근거 파일).
-    // 저장소에는 없으므로 기본으로는 돌리지 않는다. 대표 샘플로 옮기면 경로와 ignore를 고친다.
-    //   cargo test repository -- --ignored
-
+    // 설계서 5.1의 나머지 기간 형식(ECOS D·Q·A, KOSIS Q)
     #[test]
-    #[ignore = "samples/repository/ 조사 샘플이 필요하다"]
-    fn repository_ecos_day_quarter_year() {
-        let dir = "repository/16-period/ecos";
+    fn ecos_day_quarter_year() {
         let (rows, _) = success(read(
             &ecos_base_rate(Cycle::D),
             200,
-            &sample(&format!("{dir}/722Y001-0101000-D-20261001-20261023.json")),
+            &sample("ecos/722Y001-0101000-D-20261001-20261023.json"),
         ));
         check_rows(
             &rows,
@@ -584,7 +579,7 @@ mod tests {
         let (rows, _) = success(read(
             &ecos_base_rate(Cycle::Q),
             200,
-            &sample(&format!("{dir}/722Y001-0101000-Q-2025Q1-2025Q3.json")),
+            &sample("ecos/722Y001-0101000-Q-2025Q1-2025Q3.json"),
         ));
         check_rows(
             &rows,
@@ -595,7 +590,7 @@ mod tests {
         let (rows, _) = success(read(
             &ecos_base_rate(Cycle::A),
             200,
-            &sample(&format!("{dir}/722Y001-0101000-A-2023-2025.json")),
+            &sample("ecos/722Y001-0101000-A-2023-2025.json"),
         ));
         check_rows(
             &rows,
@@ -606,9 +601,8 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "samples/repository/ 조사 샘플이 필요하다"]
-    fn repository_kosis_quarter() {
-        let body = sample("repository/16-period/kosis/DT_1DA7001S-T90-0-Q-202401-202402.json");
+    fn kosis_quarter() {
+        let body = sample("kosis/DT_1DA7001S-T90-0-Q-202401-202402.json");
         let (rows, _) = success(read(&kosis_employment(Cycle::Q), 200, &body));
         check_rows(
             &rows,
