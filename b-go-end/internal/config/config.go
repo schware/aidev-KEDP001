@@ -103,6 +103,21 @@ func LoadProcessorAddr(path string) (string, error) {
 	return DefaultProcessorAddr, nil
 }
 
+// DefaultAPIAddr는 KEDP_API_ADDR가 비어 있을 때 쓰는 조회 API 주소다.
+const DefaultAPIAddr = "127.0.0.1:8080"
+
+// LoadAPIAddr는 조회 API 주소(KEDP_API_ADDR)를 읽는다. 비어 있으면 DefaultAPIAddr다.
+func LoadAPIAddr(path string) (string, error) {
+	get, err := lookup(path)
+	if err != nil {
+		return "", err
+	}
+	if addr := get("KEDP_API_ADDR"); addr != "" {
+		return addr, nil
+	}
+	return DefaultAPIAddr, nil
+}
+
 // lookup은 이름으로 값을 찾는 함수를 돌려준다. 환경 변수가 비어 있지 않으면 환경 변수, 아니면 .env 파일 값이다.
 // 파일이 없어도 오류가 아니다.
 func lookup(path string) (func(name string) string, error) {

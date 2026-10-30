@@ -93,6 +93,18 @@ func TestLoadProcessorAddr(t *testing.T) {
 	}
 }
 
+func TestLoadAPIAddr(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "none")
+	t.Setenv("KEDP_API_ADDR", "")
+	if addr, err := LoadAPIAddr(missing); err != nil || addr != DefaultAPIAddr {
+		t.Errorf("default = %q, %v", addr, err)
+	}
+	t.Setenv("KEDP_API_ADDR", "127.0.0.1:18081")
+	if addr, err := LoadAPIAddr(missing); err != nil || addr != "127.0.0.1:18081" {
+		t.Errorf("env = %q, %v", addr, err)
+	}
+}
+
 func TestLoadIndicators(t *testing.T) {
 	list, err := LoadIndicators("../../config/indicators.yaml")
 	if err != nil {

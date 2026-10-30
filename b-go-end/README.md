@@ -4,7 +4,7 @@ Go 수집 모듈. 자세한 구조와 결정은 `docs/dev-complete/b-go-end.md`�
 
 | 명령 | 하는 일 |
 | --- | --- |
-| `cmd/server` | DB `indicator`의 지표를 수집 시각마다 수집하고, 응답을 Rust 처리 서버로 넘긴다 |
+| `cmd/server` | DB `indicator`의 지표를 수집 시각마다 수집하고, 응답을 Rust 처리 서버로 넘긴다. 사용자 조회 API도 연다 |
 | `cmd/seed` | `config/indicators.yaml`의 지표 정의와 화면 처음 값을 DB에 넣는다 |
 | `cmd/sample` | 요청 값을 바로 넣어 부르고, 받은 응답을 그대로 저장한다(조사용 샘플) |
 | `cmd/fakesource` | 시험용 제공처 서버. `../samples/`의 응답을 돌려준다 |
@@ -17,8 +17,9 @@ Go 수집 모듈. 자세한 구조와 결정은 `docs/dev-complete/b-go-end.md`�
 | `KEDP_DB_HOST`, `KEDP_DB_PORT`, `KEDP_DB_NAME` | DB 접속 정보(`b-sql-db/README.md`) | `server`, `seed` |
 | `kedp_go` | `kedp_go` 계정 비밀번호(KEDP001-D022 14) | `server`, `seed` |
 | `KEDP_PROCESSOR_ADDR` | Rust 처리 서버 주소(IP:포트). 비우면 `127.0.0.1:50051` | `server` |
+| `KEDP_API_ADDR` | 조회 API 주소(IP:포트). 비우면 `127.0.0.1:8080` | `server` |
 
-- 오류와 기록에는 변수 이름만 나오고 값(키, 접속 정보, 비밀번호, Rust 주소)은 나오지 않는다.
+- 오류와 기록에는 변수 이름만 나오고 값(키, 접속 정보, 비밀번호, Rust 주소, API 주소)은 나오지 않는다.
 
 ## 지표 넣기 (`cmd/seed`)
 
@@ -34,8 +35,8 @@ go run ./cmd/seed
 ## 수집 서버 (`cmd/server`)
 
 ```sh
-go run ./cmd/server          # 수집 시각마다 수집한다(collection_run.trigger = schedule)
-go run ./cmd/server -once    # 지금 한 번 수집하고 끝낸다(trigger = manual)
+go run ./cmd/server          # 조회 API를 열고, 수집 시각마다 수집한다(collection_run.trigger = schedule)
+go run ./cmd/server -once    # 지금 한 번 수집하고 끝낸다(trigger = manual). 조회 API는 열지 않는다
 ```
 
 - 시작할 때 Rust `Check`를 부르고, 실패하면 멈춘다(KEDP001-D020). Rust 서버를 먼저 띄운다(`b-rust-processor/README.md`).
@@ -62,6 +63,35 @@ go run ./cmd/server -once    # 지금 한 번 수집하고 끝낸다(trigger = m
 | `FETCH_FAILED` | 응답을 받지 못했다(시간 초과, 연결 실패) |
 | `RESPONSE_HAS_KEY` | 응답 본문에 키가 들어 있어 Rust에 넘기지 않았다 |
 | `PROCESSOR_FAILED` | Rust에 연결하지 못했거나 Rust가 gRPC 오류를 돌려줬다 |
+
+## 조회 API (`internal/api`)
+
+사용자 화면이 읽는 API다. 주소, 요청, 응답, 오류는 `specification/40.api/README.md`를 본다.
+
+| 주소 | 하는 일 |
+| --- | --- |
+| `GET /api/indicators` | 메인 화면 카드 목록 |
+| `GET /api/indicators/{id}` | 지표 상세 |
+
+- `cmd/server`(`-once` 없이)가 수집과 함께 연다. API 주소를 열지 못하면(이미 쓰는 포트 등) 시작하지 않는다. API가 멈추면 수집도 멈춘다.
+- DB는 `kedp_go` 계정으로 읽기만 한다(`internal/store/read.go`).
+- CORS는 두지 않는다. 화면 개발은 Vite proxy로 연결한다.
+- DB 오류는 서버 기록에 남기고, 응답은 `{"error":"internal error"}`(500)만 준다.
+
+### 시험 DB로 확인
+
+`internal/store/read_test.go`는 `KEDP_TEST_DB_NAME`이 있을 때만 돈다. 시험 DB에 migration과 `internal/store/testdata/read.sql`을 넣고 `kedp_go`로 읽는다. `kedp`에는 넣지 않는다.
+
+```sh
+cd /srv/projects/aidev-kedp001
+P="docker exec -i kedp-postgres psql -X -q -v ON_ERROR_STOP=1 -U sunmoon -d kedp_api_check"
+docker exec kedp-postgres createdb -U sunmoon kedp_api_check
+$P < b-sql-db/migrations/0001_schema.up.sql
+$P < b-sql-db/migrations/0002_roles.up.sql
+$P < b-go-end/internal/store/testdata/read.sql
+(cd b-go-end && KEDP_TEST_DB_NAME=kedp_api_check go test -count=1 ./internal/store)
+docker exec kedp-postgres dropdb -U sunmoon kedp_api_check
+```
 
 ## Rust gRPC 코드 (`internal/kedpv1`)
 
