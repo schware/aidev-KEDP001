@@ -13,10 +13,11 @@ interface Props {
   points: Point[]
   cycle: Cycle
   unit: string | null
+  decimals: number | null
 }
 
 /** 시계열 선 차트. points는 오래된 것부터다(40.api 3장 chart). */
-export function Chart({ points, cycle, unit }: Props) {
+export function Chart({ points, cycle, unit, decimals }: Props) {
   const el = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -29,7 +30,7 @@ export function Chart({ points, cycle, unit }: Props) {
       grid: { left: 8, right: 16, top: 16, bottom: 48, containLabel: true },
       tooltip: {
         trigger: 'axis',
-        valueFormatter: (v: unknown) => (typeof v === 'number' ? formatValueUnit(v, unit) : String(v)),
+        valueFormatter: (v: unknown) => (typeof v === 'number' ? formatValueUnit(v, unit, decimals) : String(v)),
       },
       xAxis: {
         type: 'category',
@@ -58,7 +59,7 @@ export function Chart({ points, cycle, unit }: Props) {
       observer.disconnect()
       chart.dispose()
     }
-  }, [points, cycle, unit])
+  }, [points, cycle, unit, decimals])
 
   return <div ref={el} className="h-72 w-full sm:h-80" role="img" aria-label="시계열 차트" />
 }

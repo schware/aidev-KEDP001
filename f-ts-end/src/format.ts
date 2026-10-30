@@ -27,14 +27,23 @@ export function formatPeriod(period: string, cycle: Cycle): string {
 
 const numberFormat = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 4 })
 
-/** 값을 천 단위 쉼표와 함께 보여준다. 소수는 4자리까지다. */
-export function formatValue(value: number): string {
-  return numberFormat.format(value)
+// 소수 자릿수 0~4마다 하나씩 만들어 둔다.
+const fixedFormats = [0, 1, 2, 3, 4].map(
+  (d) => new Intl.NumberFormat('ko-KR', { minimumFractionDigits: d, maximumFractionDigits: d }),
+)
+
+/**
+ * 값을 천 단위 쉼표와 함께 보여준다.
+ * decimals(0~4)가 있으면 그 자릿수로 맞추고, null이면 받은 값 그대로(소수 4자리까지)다(40.api 1.1).
+ */
+export function formatValue(value: number, decimals: number | null = null): string {
+  const fixed = decimals === null ? undefined : fixedFormats[decimals]
+  return (fixed ?? numberFormat).format(value)
 }
 
 /** 값과 단위. 단위가 비어 있으면 숫자만이다. */
-export function formatValueUnit(value: number, unit: string | null): string {
-  const v = formatValue(value)
+export function formatValueUnit(value: number, unit: string | null, decimals: number | null = null): string {
+  const v = formatValue(value, decimals)
   return unit ? `${v} ${unit}` : v
 }
 

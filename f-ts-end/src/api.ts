@@ -14,6 +14,8 @@ export interface Card {
   name: string
   cycle: Cycle
   unit: string | null
+  /** 소수 자릿수 0~4. null이면 받은 값 그대로 보여준다(40.api 1.1). */
+  decimals: number | null
   latest: Point | null
 }
 
@@ -27,6 +29,7 @@ export interface Detail {
   name: string
   cycle: Cycle
   unit: string | null
+  decimals: number | null
   notice: string | null
   source: { code: string; name: string }
   stat_code: string
@@ -38,13 +41,21 @@ export interface Detail {
   related: { id: string; name: string }[]
 }
 
+/** 오류 응답 본문(40.api 1.4, 5.2). 400 입력 오류는 fields에 칸 이름별 이유가 붙는다. */
+export interface ErrorBody {
+  error?: string
+  fields?: Record<string, string>
+}
+
 /** API가 200이 아닌 상태를 돌려줬다. */
 export class ApiError extends Error {
   readonly status: number
+  readonly fields: Record<string, string>
 
-  constructor(status: number) {
-    super(`API status ${status}`)
+  constructor(status: number, body?: ErrorBody) {
+    super(body?.error ?? `API status ${status}`)
     this.status = status
+    this.fields = body?.fields ?? {}
   }
 }
 

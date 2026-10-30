@@ -40,9 +40,34 @@ describe('formatValue', () => {
   })
 })
 
+describe('formatValue 소수 자릿수', () => {
+  it('decimals가 숫자이면 그 자릿수로 맞춘다', () => {
+    expect(formatValue(2.5, 2)).toBe('2.50')
+    expect(formatValue(3, 2)).toBe('3.00')
+    expect(formatValue(86756.186, 2)).toBe('86,756.19')
+    expect(formatValue(1.23456, 4)).toBe('1.2346')
+    expect(formatValue(-0.39, 1)).toBe('-0.4')
+  })
+
+  it('0이면 정수로, 쉼표는 그대로', () => {
+    expect(formatValue(51817499.6, 0)).toBe('51,817,500')
+    expect(formatValue(2.5, 0)).toBe('3')
+  })
+
+  it('null이면 받은 값 그대로', () => {
+    expect(formatValue(2.5, null)).toBe('2.5')
+    expect(formatValue(51817499, null)).toBe('51,817,499')
+  })
+
+  it('범위 밖이면 받은 값 그대로', () => {
+    expect(formatValue(2.5, 7)).toBe('2.5')
+  })
+})
+
 describe('formatValueUnit', () => {
   it('단위가 있으면 붙인다', () => {
     expect(formatValueUnit(2.5, '연%')).toBe('2.5 연%')
+    expect(formatValueUnit(2.5, '연%', 2)).toBe('2.50 연%')
   })
 
   it('단위가 비어 있으면 숫자만', () => {
