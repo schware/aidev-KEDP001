@@ -1,6 +1,6 @@
 // server는 KEDP 수집 서버다. DB indicator의 지표를 수집 시각(app_setting collect_time, Asia/Seoul)마다 수집하고,
 // 받은 응답을 Rust 처리 서버(ProcessPage)로 넘긴다(KEDP001-D019, D022, b-proto/README.md).
-// 사용자 화면의 조회 API(KEDP_API_ADDR, internal/api)도 함께 연다.
+// 사용자 화면의 조회 API(KEDP_API_ADDR, internal/api)와 관리자 API(/api/admin/, internal/admin)도 함께 연다.
 //
 //	go run ./cmd/server          # 조회 API를 열고, 수집 시각마다 수집한다(trigger schedule)
 //	go run ./cmd/server -once    # 지금 한 번 수집하고 끝낸다(trigger manual). 조회 API는 열지 않는다
@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -23,6 +24,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/admin"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/api"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/collect"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/config"
@@ -68,6 +70,16 @@ func run(ctx context.Context, envPath string, once bool, timeout time.Duration, 
 	apiAddr, err := config.LoadAPIAddr(envPath)
 	if err != nil {
 		return err
+	}
+	adminConfig, err := config.LoadAdmin(envPath)
+	if err != nil {
+		return err
+	}
+	accounts := admin.Accounts{}
+	if adminConfig.File != "" {
+		if accounts, err = admin.LoadAccounts(adminConfig.File); err != nil {
+			return err
+		}
 	}
 
 	client := fetch.New(timeout, keys.All()...)
@@ -119,8 +131,23 @@ func run(ctx context.Context, envPath string, once bool, timeout time.Duration, 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	apiErr := make(chan error, 1)
+	if len(adminConfig.AllowIPs) == 0 {
+		log.Printf("admin API: KEDP_ADMIN_ALLOW_IPS is empty; every admin request gets 403")
+	}
+	if len(accounts) == 0 {
+		log.Printf("admin API: no admin account (KEDP_ADMIN_FILE); login always fails")
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/api/admin/", admin.Handler(admin.Config{
+		Store:    st,
+		AllowIPs: adminConfig.AllowIPs,
+		Accounts: accounts,
+		KeySet:   map[string]bool{"ecos": keys.ECOS != "", "kosis": keys.KOSIS != "", "data-go-kr": keys.DataGoKr != ""},
+		Loc:      collect.Seoul,
+	}))
+	mux.Handle("/", api.Handler(st, time.Now, collect.Seoul))
 	go func() {
-		apiErr <- api.Serve(ctx, ln, api.Handler(st, time.Now, collect.Seoul))
+		apiErr <- api.Serve(ctx, ln, mux)
 		cancel() // API가 멈추면 수집도 멈춘다
 	}()
 

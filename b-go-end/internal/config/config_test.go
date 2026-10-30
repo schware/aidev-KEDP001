@@ -170,3 +170,47 @@ func TestLoadIndicators(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadAdmin(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+	content := "KEDP_ADMIN_ALLOW_IPS= 192.0.2.10 ,198.51.100.0/24,, ::ffff:203.0.113.5,2001:db8::/32\nKEDP_ADMIN_FILE=/x/admin\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("KEDP_ADMIN_ALLOW_IPS", "")
+	t.Setenv("KEDP_ADMIN_FILE", "")
+	a, err := LoadAdmin(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, p := range a.AllowIPs {
+		got = append(got, p.String())
+	}
+	want := []string{"192.0.2.10/32", "198.51.100.0/24", "203.0.113.5/32", "2001:db8::/32"}
+	if !reflect.DeepEqual(got, want) || a.File != "/x/admin" {
+		t.Errorf("got %v %q, want %v", got, a.File, want)
+	}
+	if s := fmt.Sprintf("%v %+v", a, a); strings.Contains(s, "192.0.2") || strings.Contains(s, "/x/admin") {
+		t.Errorf("Admin printed values: %s", s)
+	}
+}
+
+func TestLoadAdminEmpty(t *testing.T) {
+	t.Setenv("KEDP_ADMIN_ALLOW_IPS", "")
+	t.Setenv("KEDP_ADMIN_FILE", "")
+	a, err := LoadAdmin(filepath.Join(t.TempDir(), "none"))
+	if err != nil || len(a.AllowIPs) != 0 || a.File != "" {
+		t.Errorf("got %+v %v", a.AllowIPs, err)
+	}
+}
+
+func TestLoadAdminInvalid(t *testing.T) {
+	for _, v := range []string{"192.0.2.300", "192.0.2.0/33", "example.com", "10.0.0.1,bad"} {
+		t.Setenv("KEDP_ADMIN_ALLOW_IPS", v)
+		_, err := LoadAdmin(filepath.Join(t.TempDir(), "none"))
+		if err == nil || strings.Contains(err.Error(), v) {
+			t.Errorf("%q: err = %v", v, err)
+		}
+	}
+}

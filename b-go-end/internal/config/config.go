@@ -4,6 +4,7 @@ package config
 import (
 	"bufio"
 	"fmt"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -116,6 +117,58 @@ func LoadAPIAddr(path string) (string, error) {
 		return addr, nil
 	}
 	return DefaultAPIAddr, nil
+}
+
+// Admin은 관리자 API 설정이다(KEDP001-D018). 값을 출력하거나 기록하지 않는다.
+type Admin struct {
+	// AllowIPs는 관리자 API를 쓸 수 있는 주소다. 비어 있으면 관리자 API는 모두 403이다.
+	AllowIPs []netip.Prefix
+	// File은 계정 파일 위치다. 비어 있으면 로그인할 수 없다.
+	File string
+}
+
+func (Admin) String() string { return "Admin{***}" }
+
+// LoadAdmin은 KEDP_ADMIN_ALLOW_IPS(쉼표로 나눈 IP 또는 CIDR)와 KEDP_ADMIN_FILE을 읽는다.
+// 틀린 주소가 있으면 오류다. 오류에는 변수 이름만 넣는다.
+func LoadAdmin(path string) (Admin, error) {
+	get, err := lookup(path)
+	if err != nil {
+		return Admin{}, err
+	}
+	a := Admin{File: get("KEDP_ADMIN_FILE")}
+	for _, v := range strings.Split(get("KEDP_ADMIN_ALLOW_IPS"), ",") {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		p, err := parsePrefix(v)
+		if err != nil {
+			return Admin{}, fmt.Errorf("KEDP_ADMIN_ALLOW_IPS has an invalid IP or CIDR")
+		}
+		a.AllowIPs = append(a.AllowIPs, p)
+	}
+	return a, nil
+}
+
+// parsePrefix는 IP(한 주소) 또는 CIDR을 읽는다. IPv4에 대응한 IPv6 주소는 IPv4로 바꾼다.
+func parsePrefix(v string) (netip.Prefix, error) {
+	if strings.Contains(v, "/") {
+		p, err := netip.ParsePrefix(v)
+		if err != nil {
+			return netip.Prefix{}, err
+		}
+		if p.Addr().Is4In6() && p.Bits() >= 96 {
+			p = netip.PrefixFrom(p.Addr().Unmap(), p.Bits()-96)
+		}
+		return p.Masked(), nil
+	}
+	a, err := netip.ParseAddr(v)
+	if err != nil {
+		return netip.Prefix{}, err
+	}
+	a = a.Unmap()
+	return netip.PrefixFrom(a, a.BitLen()), nil
 }
 
 // lookup은 이름으로 값을 찾는 함수를 돌려준다. 환경 변수가 비어 있지 않으면 환경 변수, 아니면 .env 파일 값이다.
