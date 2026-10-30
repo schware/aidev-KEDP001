@@ -1,8 +1,9 @@
 // server는 KEDP 수집 서버다. DB indicator의 지표를 수집 시각(app_setting collect_time, Asia/Seoul)마다 수집하고,
 // 받은 응답을 Rust 처리 서버(ProcessPage)로 넘긴다(KEDP001-D019, D022, b-proto/README.md).
+// 사용자 화면의 조회 API(KEDP_API_ADDR, internal/api)도 함께 연다.
 //
-//	go run ./cmd/server          # 수집 시각마다 수집한다(trigger schedule)
-//	go run ./cmd/server -once    # 지금 한 번 수집하고 끝낸다(trigger manual)
+//	go run ./cmd/server          # 조회 API를 열고, 수집 시각마다 수집한다(trigger schedule)
+//	go run ./cmd/server -once    # 지금 한 번 수집하고 끝낸다(trigger manual). 조회 API는 열지 않는다
 //
 // 시작할 때 Rust Check가 실패하면 멈춘다(KEDP001-D020).
 package main
@@ -13,6 +14,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -21,6 +23,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/api"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/collect"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/config"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/fetch"
@@ -59,6 +62,10 @@ func run(ctx context.Context, envPath string, once bool, timeout time.Duration, 
 		return err
 	}
 	addr, err := config.LoadProcessorAddr(envPath)
+	if err != nil {
+		return err
+	}
+	apiAddr, err := config.LoadAPIAddr(envPath)
 	if err != nil {
 		return err
 	}
@@ -103,8 +110,27 @@ func run(ctx context.Context, envPath string, once bool, timeout time.Duration, 
 		log.Printf("collection finished (%s)", sum)
 		return err
 	}
-	log.Printf("server started")
-	return c.Schedule(ctx, tick)
+
+	// 주소를 먼저 열어 두어, 열지 못하면(이미 쓰는 포트 등) 바로 멈춘다. 오류에 주소를 넣지 않는다.
+	ln, err := net.Listen("tcp", apiAddr)
+	if err != nil {
+		return errors.New("cannot open API address (KEDP_API_ADDR)")
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	apiErr := make(chan error, 1)
+	go func() {
+		apiErr <- api.Serve(ctx, ln, api.Handler(st, time.Now, collect.Seoul))
+		cancel() // API가 멈추면 수집도 멈춘다
+	}()
+
+	log.Printf("server started (API and schedule)")
+	err = c.Schedule(ctx, tick)
+	cancel()
+	if e := <-apiErr; e != nil {
+		return fmt.Errorf("API server: %w", e)
+	}
+	return err
 }
 
 // check는 Rust 처리 서버의 Check를 부른다. Rust가 DB에 접속할 수 있을 때만 성공이다(b-proto/README.md).

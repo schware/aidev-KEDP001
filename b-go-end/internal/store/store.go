@@ -2,6 +2,7 @@
 //
 //   - 쓰는 테이블: indicator, indicator_display(처음 값), collection_run
 //   - 읽는 테이블: app_setting(collect_time), observation(마지막 기간)
+//   - 조회 API(read.go): indicator, indicator_display, indicator_relation, source, observation, collection_run을 읽기만 한다
 //
 // 오류와 기록에는 접속 정보(주소, 포트, DB 이름, 비밀번호)를 넣지 않는다.
 package store
