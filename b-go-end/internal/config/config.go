@@ -125,30 +125,50 @@ type Admin struct {
 	AllowIPs []netip.Prefix
 	// File은 계정 파일 위치다. 비어 있으면 로그인할 수 없다.
 	File string
+	// TrustedProxies는 X-Forwarded-For를 믿을 proxy 주소다. 비어 있으면 DefaultTrustedProxy 하나다.
+	TrustedProxies []netip.Prefix
 }
+
+// DefaultTrustedProxy는 KEDP_TRUSTED_PROXIES가 비어 있을 때 믿는 proxy다(같은 서버의 Vite proxy).
+var DefaultTrustedProxy = netip.MustParsePrefix("127.0.0.1/32")
 
 func (Admin) String() string { return "Admin{***}" }
 
-// LoadAdmin은 KEDP_ADMIN_ALLOW_IPS(쉼표로 나눈 IP 또는 CIDR)와 KEDP_ADMIN_FILE을 읽는다.
-// 틀린 주소가 있으면 오류다. 오류에는 변수 이름만 넣는다.
+// LoadAdmin은 KEDP_ADMIN_ALLOW_IPS, KEDP_TRUSTED_PROXIES(쉼표로 나눈 IP 또는 CIDR)와 KEDP_ADMIN_FILE을 읽는다.
+// KEDP_TRUSTED_PROXIES가 비어 있으면 127.0.0.1이다. 틀린 주소가 있으면 오류다. 오류에는 변수 이름만 넣는다.
 func LoadAdmin(path string) (Admin, error) {
 	get, err := lookup(path)
 	if err != nil {
 		return Admin{}, err
 	}
 	a := Admin{File: get("KEDP_ADMIN_FILE")}
-	for _, v := range strings.Split(get("KEDP_ADMIN_ALLOW_IPS"), ",") {
+	if a.AllowIPs, err = parsePrefixes(get, "KEDP_ADMIN_ALLOW_IPS"); err != nil {
+		return Admin{}, err
+	}
+	if a.TrustedProxies, err = parsePrefixes(get, "KEDP_TRUSTED_PROXIES"); err != nil {
+		return Admin{}, err
+	}
+	if len(a.TrustedProxies) == 0 {
+		a.TrustedProxies = []netip.Prefix{DefaultTrustedProxy}
+	}
+	return a, nil
+}
+
+// parsePrefixes는 변수 name의 쉼표로 나눈 IP 또는 CIDR을 읽는다. 빈 칸은 건너뛴다.
+func parsePrefixes(get func(string) string, name string) ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	for _, v := range strings.Split(get(name), ",") {
 		v = strings.TrimSpace(v)
 		if v == "" {
 			continue
 		}
 		p, err := parsePrefix(v)
 		if err != nil {
-			return Admin{}, fmt.Errorf("KEDP_ADMIN_ALLOW_IPS has an invalid IP or CIDR")
+			return nil, fmt.Errorf("%s has an invalid IP or CIDR", name)
 		}
-		a.AllowIPs = append(a.AllowIPs, p)
+		out = append(out, p)
 	}
-	return a, nil
+	return out, nil
 }
 
 // parsePrefix는 IP(한 주소) 또는 CIDR을 읽는다. IPv4에 대응한 IPv6 주소는 IPv4로 바꾼다.

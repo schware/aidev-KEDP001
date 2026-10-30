@@ -1,0 +1,4 @@
+# image에는 화면을 build하는 데 필요한 것만 보낸다.
+node_modules
+dist
+.env*

@@ -177,11 +177,9 @@ func (s *sessions) delete(token string) {
 	delete(s.m, token)
 }
 
-var loopback = netip.MustParseAddr("127.0.0.1")
-
-// ClientIP는 요청한 쪽의 주소다. RemoteAddr를 쓰고, RemoteAddr가 127.0.0.1(같은 서버의 proxy)일 때만
+// ClientIP는 요청한 쪽의 주소다. RemoteAddr를 쓰고, RemoteAddr가 믿을 proxy(trusted) 안에 있을 때만
 // X-Forwarded-For의 마지막 주소를 쓴다. 주소를 읽을 수 없으면 false다.
-func ClientIP(remoteAddr string, forwardedFor []string) (netip.Addr, bool) {
+func ClientIP(remoteAddr string, forwardedFor []string, trusted []netip.Prefix) (netip.Addr, bool) {
 	host, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
 		return netip.Addr{}, false
@@ -191,7 +189,7 @@ func ClientIP(remoteAddr string, forwardedFor []string) (netip.Addr, bool) {
 		return netip.Addr{}, false
 	}
 	addr = addr.Unmap()
-	if addr != loopback || len(forwardedFor) == 0 {
+	if !allowed(trusted, addr) || len(forwardedFor) == 0 {
 		return addr, true
 	}
 	list := strings.Split(strings.Join(forwardedFor, ","), ",")
@@ -202,7 +200,7 @@ func ClientIP(remoteAddr string, forwardedFor []string) (netip.Addr, bool) {
 	return fwd.Unmap(), true
 }
 
-// allowed는 addr이 허용 IP 안에 있는지 알려 준다. 허용 IP가 비어 있으면 false다.
+// allowed는 addr이 주소 목록(허용 IP, 믿을 proxy) 안에 있는지 알려 준다. 목록이 비어 있으면 false다.
 func allowed(allow []netip.Prefix, addr netip.Addr) bool {
 	for _, p := range allow {
 		if p.Contains(addr) {

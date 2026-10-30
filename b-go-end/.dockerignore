@@ -1,0 +1,5 @@
+# image에는 cmd/server를 만드는 데 필요한 것만 보낸다.
+.env*
+*.md
+**/*_test.go
+**/testdata

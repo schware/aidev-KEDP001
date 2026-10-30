@@ -1,0 +1,6 @@
+# image에는 실행 파일을 만드는 데 필요한 것만 보낸다.
+target
+tests
+scripts
+.env*
+*.md
