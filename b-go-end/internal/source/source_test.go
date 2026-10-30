@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/config"
 )
@@ -52,17 +53,22 @@ func TestBaseGetWithoutKey(t *testing.T) {
 	}
 }
 
-func TestRequireAllRows(t *testing.T) {
-	if err := RequireAllRows("ecos", 1, 2); err == nil {
-		t.Error("want error")
+func TestPages(t *testing.T) {
+	cases := []struct{ total, size, want int }{{0, 1000, 1}, {1, 1000, 1}, {1000, 1000, 1}, {1001, 1000, 2}, {2500, 1000, 3}, {5, 0, 1}}
+	for _, c := range cases {
+		if got := Pages(c.total, c.size); got != c.want {
+			t.Errorf("Pages(%d, %d) = %d, want %d", c.total, c.size, got, c.want)
+		}
 	}
-	if err := RequireAllRows("ecos", 2, 2); err != nil {
-		t.Error(err)
+	if (Request{}).PageNumber() != 1 || (Request{Page: 3}).PageNumber() != 3 {
+		t.Error("PageNumber")
 	}
 }
 
-func TestCount(t *testing.T) {
-	if n, err := Count([]int{1, 2}, nil); n != 2 || err != nil {
-		t.Errorf("Count = %d, %v", n, err)
+func TestQuarter(t *testing.T) {
+	for m, want := range map[time.Month]int{time.January: 1, time.March: 1, time.April: 2, time.September: 3, time.October: 4, time.December: 4} {
+		if got := Quarter(time.Date(2026, m, 15, 0, 0, 0, 0, time.UTC)); got != want {
+			t.Errorf("Quarter(%s) = %d, want %d", m, got, want)
+		}
 	}
 }

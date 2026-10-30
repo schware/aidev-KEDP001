@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/config"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/fetch"
@@ -16,7 +17,12 @@ type Request struct {
 	Indicator config.Indicator
 	Start     string
 	End       string
+	// Page는 받을 페이지 번호다. 1부터 센다. 0이면 1이다(KEDP001-D022 21).
+	Page int
 }
+
+// PageNumber는 받을 페이지 번호다. 0 이하면 1이다.
+func (r Request) PageNumber() int { return max(r.Page, 1) }
 
 // SampleName은 이 요청의 응답 샘플 파일 이름이다.
 // 통계 코드-항목 코드-분류 코드…-주기-시작-끝.json (비어 있는 칸은 빠진다. 예: 공공데이터포털은 항목 코드가 없다)
@@ -36,9 +42,30 @@ func (r Request) SampleName() string {
 // Source는 지표 정보를 받아 원본 응답을 돌려준다.
 type Source interface {
 	Name() string
+	// Fetch는 req.Page 페이지의 원본 응답을 돌려준다.
 	Fetch(ctx context.Context, req Request) ([]byte, error)
-	// Check는 원본 응답이 정상 응답인지 확인하고 행 수를 돌려준다. 오류 응답이면 *APIError를 돌려준다.
-	Check(body []byte) (int, error)
+	// LastPage는 응답 본문에 적힌 전체 행 수로 마지막 페이지 번호를 돌려준다.
+	// 페이지를 나누지 않는 제공처이거나 전체 행 수를 읽을 수 없으면(오류 응답 등) 1이다.
+	LastPage(body []byte) int
+	// Period는 날짜 t가 들어 있는 기간을 cycle(D/M/Q/A)의 요청 형식으로 돌려준다(설계서 5.1).
+	// 제공처가 받지 않는 주기면 오류다.
+	Period(cycle string, t time.Time) (string, error)
+}
+
+// Pages는 전체 행 수 total을 size개씩 나눈 페이지 수다. 0 이하면 1이다.
+func Pages(total, size int) int {
+	if total <= 0 || size <= 0 {
+		return 1
+	}
+	return (total + size - 1) / size
+}
+
+// Quarter는 t의 분기(1~4)다.
+func Quarter(t time.Time) int { return (int(t.Month())-1)/3 + 1 }
+
+// UnsupportedCycle은 제공처가 받지 않는 주기의 오류다.
+func UnsupportedCycle(source, cycle string) error {
+	return fmt.Errorf("%s: cycle %q is not supported", source, cycle)
 }
 
 // APIError는 제공처가 응답 본문으로 돌려준 오류다. 코드는 제공처마다 다르다.
@@ -58,10 +85,15 @@ func NoData(err error) bool {
 	return errors.As(err, &apiErr) && apiErr.NoData
 }
 
-// RequireKey는 키가 비어 있으면 오류를 돌려준다. 오류에는 환경 변수 이름만 넣는다.
+// KeyError는 키가 비어 있어 요청하지 않았다는 오류다. 환경 변수 이름만 들어 있다.
+type KeyError struct{ Source, EnvName string }
+
+func (e *KeyError) Error() string { return fmt.Sprintf("%s: %s is not set", e.Source, e.EnvName) }
+
+// RequireKey는 키가 비어 있으면 *KeyError를 돌려준다.
 func RequireKey(source, envName, key string) error {
 	if key == "" {
-		return fmt.Errorf("%s: %s is not set", source, envName)
+		return &KeyError{Source: source, EnvName: envName}
 	}
 	return nil
 }
@@ -88,15 +120,4 @@ func (b Base) Get(ctx context.Context, buildURL func(key string) string) ([]byte
 		return nil, err
 	}
 	return b.client.Get(ctx, buildURL(b.key))
-}
-
-// Count는 Parse 결과를 Check 결과(행 수, 오류)로 바꾼다.
-func Count[T any](rows []T, err error) (int, error) { return len(rows), err }
-
-// RequireAllRows는 한 번에 받은 행 수(got)가 전체(total)보다 적으면 오류를 돌려준다(페이지 나누기는 아직 없다).
-func RequireAllRows(source string, got, total int) error {
-	if total > got {
-		return fmt.Errorf("%s: got %d of %d rows; paging is not implemented", source, got, total)
-	}
-	return nil
 }

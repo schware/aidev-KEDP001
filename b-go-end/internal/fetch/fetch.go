@@ -79,6 +79,8 @@ func record(ctx context.Context, e Exchange) {
 type Client struct {
 	http    *http.Client
 	secrets []string
+	// host가 있으면 요청 주소의 scheme과 host를 이것으로 바꾼다(시험용).
+	host *url.URL
 }
 
 // New는 시간 제한이 timeout인 Client를 만든다. secrets는 가릴 키 목록이다.
@@ -89,10 +91,41 @@ func New(timeout time.Duration, secrets ...string) *Client {
 // Mask는 이 Client가 아는 키를 가린다.
 func (c *Client) Mask(s string) string { return Mask(s, c.secrets...) }
 
+// HasKey는 body에 이 Client가 아는 키가 (어떤 형태로든) 들어 있는지 알려 준다.
+func (c *Client) HasKey(body []byte) bool { return c.Mask(string(body)) != string(body) }
+
+// SetHost는 요청 주소의 scheme과 host를 base(예: http://127.0.0.1:18080)의 것으로 바꿔 보내게 한다.
+// 경로와 질의는 그대로다. 실제 제공처 대신 시험용 서버(cmd/fakesource)를 부를 때 쓴다.
+func (c *Client) SetHost(base string) error {
+	u, err := url.Parse(base)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return fmt.Errorf("host %q is not scheme://host[:port]", base)
+	}
+	c.host = &url.URL{Scheme: u.Scheme, Host: u.Host}
+	return nil
+}
+
+// target은 실제로 보낼 주소다. SetHost를 했으면 scheme과 host를 바꾼다.
+func (c *Client) target(rawURL string) (string, error) {
+	if c.host == nil {
+		return rawURL, nil
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", errors.New(c.Mask(err.Error()))
+	}
+	u.Scheme, u.Host = c.host.Scheme, c.host.Host
+	return u.String(), nil
+}
+
 // Get은 rawURL에 GET 요청을 보내고 응답 본문을 돌려준다.
 // 돌려주는 오류에는 가린 주소만 들어 있다. 원래 오류는 키가 들어 있어 감싸지 않는다.
 // 상태 코드가 200이 아니면 *StatusError를 돌려준다.
 func (c *Client) Get(ctx context.Context, rawURL string) ([]byte, error) {
+	rawURL, err := c.target(rawURL)
+	if err != nil {
+		return nil, err
+	}
 	log.Printf("GET %s", c.Mask(rawURL))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
@@ -118,7 +151,7 @@ func (c *Client) Get(ctx context.Context, rawURL string) ([]byte, error) {
 
 // Save는 응답 본문을 dir/name에 저장한다. 본문에 키가 (어떤 형태로든) 들어 있으면 저장하지 않는다.
 func (c *Client) Save(dir, name string, body []byte) (string, error) {
-	if c.Mask(string(body)) != string(body) {
+	if c.HasKey(body) {
 		return "", errors.New("response contains an API key; not saved")
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {

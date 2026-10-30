@@ -14,6 +14,8 @@ if [ -f .env ]; then
   added=$(git diff --cached -U0 --no-color | grep '^+' | grep -v '^+++' || true)
   while IFS='=' read -r name value; do
     case "$name" in ''|\#*) continue ;; esac
+    # 비밀 값(키, DB 비밀번호)만 검사한다. 주소·포트·DB 이름은 비밀이 아니다.
+    case "$name" in ECOS_API_KEY|KOSIS_API_KEY|DATA_GO_KR_API_KEY|kedp_go|kedp_rust) ;; *) continue ;; esac
     value="${value%\"}"; value="${value#\"}"
     [ "${#value}" -lt 8 ] && continue
     if printf '%s' "$added" | grep -qF -- "$value"; then

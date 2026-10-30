@@ -3,6 +3,7 @@ package kosis
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/config"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/fetch"
@@ -112,10 +113,40 @@ func TestParseErrors(t *testing.T) {
 	}
 }
 
-func TestCheck(t *testing.T) {
-	n, err := New("", nil).Check(readSample(t, "DT_1IN1502-T100-00-Y-2015-2025.json"))
-	if err != nil || n != 11 {
-		t.Errorf("Check = %d, %v", n, err)
+func TestLastPage(t *testing.T) {
+	if got := New("", nil).LastPage(readSample(t, "DT_1IN1502-T100-00-Y-2015-2025.json")); got != 1 {
+		t.Errorf("LastPage = %d", got)
+	}
+}
+
+func TestPeriod(t *testing.T) {
+	s := New("", nil)
+	day := time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC)
+	for cycle, want := range map[string]string{"M": "202605", "Q": "202602", "A": "2026"} {
+		if got, err := s.Period(cycle, day); err != nil || got != want {
+			t.Errorf("Period(%s) = %q, %v, want %q", cycle, got, err, want)
+		}
+	}
+	if _, err := s.Period("D", day); err == nil {
+		t.Error("D: want error")
+	}
+}
+
+// DB의 연 주기 A는 요청할 때 Y로 바꾸고, 지표에 적힌 기관 코드를 쓴다.
+func TestDataURLYear(t *testing.T) {
+	req := source.Request{
+		Indicator: config.Indicator{OrgID: "999", StatCode: "DT_1IN1502", ItemCode: "T100", Classes: []string{"00"}, Cycle: "A"},
+		Start:     "2006",
+		End:       "2026",
+	}
+	got := dataURL("TESTKEY", req)
+	if !strings.Contains(got, "&prdSe=Y&") || !strings.Contains(got, "&orgId=999&") {
+		t.Errorf("dataURL = %s", got)
+	}
+	// cmd/sample처럼 Y를 그대로 넣어도 Y다.
+	req.Indicator.Cycle = "Y"
+	if got := dataURL("TESTKEY", req); !strings.Contains(got, "&prdSe=Y&") {
+		t.Errorf("dataURL = %s", got)
 	}
 }
 

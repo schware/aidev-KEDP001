@@ -1,10 +1,11 @@
-// Package config는 .env의 API 키와 지표 정보(indicators.yaml)를 읽는다.
+// Package config는 .env의 API 키·DB 접속 정보·Rust 주소와 지표 정보(indicators.yaml)를 읽는다.
 package config
 
 import (
 	"bufio"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -31,20 +32,89 @@ func (k Keys) All() []string {
 // LoadKeys는 path의 .env 파일에서 키를 읽는다.
 // 같은 이름의 환경 변수가 있으면 환경 변수를 쓴다. 파일이 없어도 오류가 아니다.
 func LoadKeys(path string) (Keys, error) {
-	env, err := readEnvFile(path)
-	if err != nil && !os.IsNotExist(err) {
+	get, err := lookup(path)
+	if err != nil {
 		return Keys{}, err
-	}
-	get := func(name string) string {
-		if v, ok := os.LookupEnv(name); ok && v != "" {
-			return v
-		}
-		return env[name]
 	}
 	return Keys{
 		ECOS:     get("ECOS_API_KEY"),
 		KOSIS:    get("KOSIS_API_KEY"),
 		DataGoKr: get("DATA_GO_KR_API_KEY"),
+	}, nil
+}
+
+// DBUser는 Go가 DB에 접속하는 계정이다(KEDP001-D022 14). 비밀번호는 같은 이름의 변수에 둔다.
+const DBUser = "kedp_go"
+
+// DB는 DB 접속 정보다. 값을 출력하거나 기록하지 않는다(%v로 찍어도 나오지 않는다).
+type DB struct {
+	Host     string
+	Port     uint16
+	Name     string
+	Password string
+}
+
+func (DB) String() string { return "DB{***}" }
+
+// LoadDB는 path의 .env 파일과 환경 변수에서 DB 접속 정보를 읽는다. 하나라도 비어 있으면 오류다.
+// 오류에는 변수 이름만 넣는다.
+func LoadDB(path string) (DB, error) {
+	get, err := lookup(path)
+	if err != nil {
+		return DB{}, err
+	}
+	var db DB
+	var missing []string
+	for _, v := range []struct {
+		name string
+		dst  *string
+	}{{"KEDP_DB_HOST", &db.Host}, {"KEDP_DB_NAME", &db.Name}, {DBUser, &db.Password}} {
+		if *v.dst = get(v.name); *v.dst == "" {
+			missing = append(missing, v.name)
+		}
+	}
+	port := get("KEDP_DB_PORT")
+	if port == "" {
+		missing = append(missing, "KEDP_DB_PORT")
+	}
+	if len(missing) > 0 {
+		return DB{}, fmt.Errorf("%s is not set", strings.Join(missing, ", "))
+	}
+	p, err := strconv.ParseUint(port, 10, 16)
+	if err != nil || p == 0 {
+		return DB{}, fmt.Errorf("KEDP_DB_PORT is not a port number")
+	}
+	db.Port = uint16(p)
+	return db, nil
+}
+
+// DefaultProcessorAddr는 KEDP_PROCESSOR_ADDR가 비어 있을 때 쓰는 Rust 처리 서버 주소다(b-rust-processor와 같다).
+const DefaultProcessorAddr = "127.0.0.1:50051"
+
+// LoadProcessorAddr는 Rust 처리 서버 주소(KEDP_PROCESSOR_ADDR)를 읽는다. 비어 있으면 DefaultProcessorAddr다.
+func LoadProcessorAddr(path string) (string, error) {
+	get, err := lookup(path)
+	if err != nil {
+		return "", err
+	}
+	if addr := get("KEDP_PROCESSOR_ADDR"); addr != "" {
+		return addr, nil
+	}
+	return DefaultProcessorAddr, nil
+}
+
+// lookup은 이름으로 값을 찾는 함수를 돌려준다. 환경 변수가 비어 있지 않으면 환경 변수, 아니면 .env 파일 값이다.
+// 파일이 없어도 오류가 아니다.
+func lookup(path string) (func(name string) string, error) {
+	env, err := readEnvFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	return func(name string) string {
+		if v, ok := os.LookupEnv(name); ok && v != "" {
+			return v
+		}
+		return env[name]
 	}, nil
 }
 
@@ -79,25 +149,46 @@ func readEnvFile(path string) (map[string]string, error) {
 	return env, nil
 }
 
-// Indicator는 지표 하나의 수집 정보다.
+// Indicator는 지표 하나의 수집 정보다. DB indicator 테이블의 칼럼과 같다.
 type Indicator struct {
-	ID       string `yaml:"id"`
-	Name     string `yaml:"name"`
-	Source   string `yaml:"source"`
+	ID     string `yaml:"id"`
+	Name   string `yaml:"name"`
+	Source string `yaml:"source"`
+	// OrgID는 KOSIS 기관 코드(orgId)다. 다른 제공처는 비운다.
+	OrgID    string `yaml:"org_id"`
 	StatCode string `yaml:"stat_code"`
 	ItemCode string `yaml:"item_code"`
 	// Classes는 분류 코드다. KOSIS는 objL1, objL2… 순서로 넣는다. ECOS는 ITEM_CODE2, ITEM_CODE3… 순서로 넣는다(지금 등록된 ECOS 지표는 비워 둔다).
 	Classes []string `yaml:"classes"`
-	// Cycle은 제공처 요청에 넣는 주기 값 그대로다(ECOS A/Q/M/D, KOSIS Y/Q/M).
+	// ValueField는 공공데이터포털에서 지표 값으로 쓰는 항목이다(clpr, KEDP001-D022 8). 다른 제공처는 비운다.
+	ValueField string `yaml:"value_field"`
+	// Cycle은 D/M/Q/A다. 연은 A이고, KOSIS에 요청할 때만 Y로 바꾼다(KEDP001-D022 3).
 	Cycle string `yaml:"cycle"`
 }
 
+// Display는 지표 하나의 화면 처음 값이다. DB indicator_display 테이블의 칼럼과 같다.
+type Display struct {
+	Visible bool `yaml:"visible"`
+	Order   int  `yaml:"order"`
+	// ChartPeriod는 상세 화면 차트 기간이다. PostgreSQL interval 글(예: 10 years)이다.
+	// 관측값이 없을 때 처음 수집할 과거 범위도 이 기간이다(KEDP001-D022 12).
+	ChartPeriod string `yaml:"chart_period"`
+	// Notice는 상세 화면 맨 위 안내 문구다. 없으면 비운다.
+	Notice string `yaml:"notice"`
+}
+
+// Entry는 indicators.yaml의 지표 하나다. DB에 넣을 처음 값이다(cmd/seed).
+type Entry struct {
+	Indicator `yaml:",inline"`
+	Display   Display `yaml:"display"`
+}
+
 type indicatorFile struct {
-	Indicators []Indicator `yaml:"indicators"`
+	Indicators []Entry `yaml:"indicators"`
 }
 
 // LoadIndicators는 indicators.yaml을 읽는다.
-func LoadIndicators(path string) ([]Indicator, error) {
+func LoadIndicators(path string) ([]Entry, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -107,14 +198,4 @@ func LoadIndicators(path string) ([]Indicator, error) {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	return f.Indicators, nil
-}
-
-// FindIndicator는 id가 같은 지표를 찾는다.
-func FindIndicator(list []Indicator, id string) (Indicator, error) {
-	for _, ind := range list {
-		if ind.ID == id {
-			return ind, nil
-		}
-	}
-	return Indicator{}, fmt.Errorf("indicator %q not found", id)
 }

@@ -1,87 +1,119 @@
-// server는 KEDP 수집 프로그램의 시작점이다.
-// 지금(KEDP001-D021 3단계)은 지표 하나의 응답 샘플을 받아 저장하는 일만 한다.
+// server는 KEDP 수집 서버다. DB indicator의 지표를 수집 시각(app_setting collect_time, Asia/Seoul)마다 수집하고,
+// 받은 응답을 Rust 처리 서버(ProcessPage)로 넘긴다(KEDP001-D019, D022, b-proto/README.md).
 //
-//	go run ./cmd/server -indicator ecos-base-rate -start 202401 -end 202609
+//	go run ./cmd/server          # 수집 시각마다 수집한다(trigger schedule)
+//	go run ./cmd/server -once    # 지금 한 번 수집하고 끝낸다(trigger manual)
+//
+// 시작할 때 Rust Check가 실패하면 멈춘다(KEDP001-D020).
 package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
+	"os/signal"
+	"syscall"
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/collect"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/config"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/fetch"
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/kedpv1"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/source"
 	datagokr "github.com/schware/aidev-KEDP001/b-go-end/internal/source/data_go_kr"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/source/ecos"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/source/kosis"
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/store"
 )
+
+// tick은 수집 시각이 지났는지 확인하는 간격이다.
+const tick = 30 * time.Second
 
 func main() {
 	envPath := flag.String("env", "../.env", ".env 파일 위치")
-	indicatorsPath := flag.String("indicators", "config/indicators.yaml", "지표 정보 파일")
-	id := flag.String("indicator", "", "지표 id (indicators.yaml)")
-	start := flag.String("start", "", "조회 시작 기간")
-	end := flag.String("end", "", "조회 끝 기간")
-	outDir := flag.String("out", "../samples", "샘플 저장 폴더 (아래에 제공처 폴더를 만든다)")
-	timeout := flag.Duration("timeout", 20*time.Second, "요청 시간 제한")
+	once := flag.Bool("once", false, "지금 한 번 수집하고 끝낸다(trigger manual)")
+	timeout := flag.Duration("timeout", 20*time.Second, "제공처 요청 시간 제한")
+	sourceHost := flag.String("source-host", "", "시험용: 제공처 대신 요청을 보낼 주소(예: http://127.0.0.1:18080, cmd/fakesource)")
 	flag.Parse()
 
-	if *id == "" || *start == "" || *end == "" {
-		flag.Usage()
-		os.Exit(2)
-	}
-	if err := run(*envPath, *indicatorsPath, *id, *start, *end, *outDir, *timeout); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := run(ctx, *envPath, *once, *timeout, *sourceHost); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(envPath, indicatorsPath, id, start, end, outDir string, timeout time.Duration) error {
+func run(ctx context.Context, envPath string, once bool, timeout time.Duration, sourceHost string) error {
 	keys, err := config.LoadKeys(envPath)
 	if err != nil {
 		return err
 	}
-	list, err := config.LoadIndicators(indicatorsPath)
+	dbConfig, err := config.LoadDB(envPath)
 	if err != nil {
 		return err
 	}
-	ind, err := config.FindIndicator(list, id)
+	addr, err := config.LoadProcessorAddr(envPath)
 	if err != nil {
 		return err
 	}
 
 	client := fetch.New(timeout, keys.All()...)
-	var src source.Source
-	switch ind.Source {
-	case "ecos":
-		src = ecos.New(keys.ECOS, client)
-	case "kosis":
-		src = kosis.New(keys.KOSIS, client)
-	case "data-go-kr":
-		src = datagokr.New(keys.DataGoKr, client)
-	default:
-		return fmt.Errorf("source %q is not implemented", ind.Source)
+	if sourceHost != "" {
+		if err := client.SetHost(sourceHost); err != nil {
+			return err
+		}
+		log.Printf("test mode: requests go to %s instead of the providers", sourceHost)
 	}
 
-	req := source.Request{Indicator: ind, Start: start, End: end}
-	body, err := src.Fetch(context.Background(), req)
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return err
+		return errors.New("KEDP_PROCESSOR_ADDR is invalid")
 	}
-	// 정상 응답만 샘플로 저장한다.
-	n, err := src.Check(body)
-	if err != nil {
+	defer conn.Close()
+	processor := kedpv1.NewProcessorServiceClient(conn)
+	if err := check(ctx, processor); err != nil {
 		return err
 	}
 
-	path, err := client.Save(filepath.Join(outDir, src.Name()), req.SampleName(), body)
+	st, err := store.Open(ctx, dbConfig)
 	if err != nil {
 		return err
 	}
-	log.Printf("saved %d rows to %s", n, path)
+	defer st.Close()
+
+	c := &collect.Collector{
+		Store:     st,
+		Processor: processor,
+		Sources: map[string]source.Source{
+			"ecos":       ecos.New(keys.ECOS, client),
+			"kosis":      kosis.New(keys.KOSIS, client),
+			"data-go-kr": datagokr.New(keys.DataGoKr, client),
+		},
+		HasKey: client.HasKey,
+	}
+
+	if once {
+		sum, err := c.Run(ctx, store.TriggerManual)
+		log.Printf("collection finished (%s)", sum)
+		return err
+	}
+	log.Printf("server started")
+	return c.Schedule(ctx, tick)
+}
+
+// check는 Rust 처리 서버의 Check를 부른다. Rust가 DB에 접속할 수 있을 때만 성공이다(b-proto/README.md).
+func check(ctx context.Context, p kedpv1.ProcessorServiceClient) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if _, err := p.Check(ctx, &kedpv1.CheckRequest{}); err != nil {
+		return fmt.Errorf("processor check failed (KEDP_PROCESSOR_ADDR): %v", collect.GRPCError(err))
+	}
+	log.Printf("processor check ok")
 	return nil
 }
