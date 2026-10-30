@@ -14,10 +14,11 @@ INSERT INTO indicator (id, name, source_code, stat_code, item_code, org_id, valu
     -- 화면 설정이 없다. 빈 단위는 없는 것과 같다
     ('t-bare', '설정 없음', 'ecos', 'X', 'Y', NULL, NULL, 'Q', '', '');
 
-INSERT INTO indicator_display (indicator_id, is_visible, sort_order, chart_period, notice) VALUES
-    ('t-rate', true, 2, '1 year', NULL),
-    ('t-pop', true, 1, '20 years', '안내 문구'),
-    ('t-hidden', false, 0, '1 year', NULL);
+-- 소수 자릿수: t-rate 2, t-pop은 없다
+INSERT INTO indicator_display (indicator_id, is_visible, sort_order, chart_period, number_format, notice) VALUES
+    ('t-rate', true, 2, '1 year', '{"decimals": 2}', NULL),
+    ('t-pop', true, 1, '20 years', '{}', '안내 문구'),
+    ('t-hidden', false, 0, '1 year', '{"decimals": 0}', NULL);
 
 INSERT INTO indicator_relation (indicator_id, related_indicator_id, sort_order) VALUES
     ('t-rate', 't-pop', 2),

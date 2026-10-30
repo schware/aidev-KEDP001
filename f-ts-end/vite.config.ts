@@ -11,6 +11,6 @@ export default defineConfig(({ mode }) => ({
   build: { chunkSizeWarningLimit: 600 },
   server: {
     host: '127.0.0.1',
-    proxy: mode === 'mock' ? undefined : { '/api': 'http://127.0.0.1:8080' },
+    proxy: mode === 'mock' ? undefined : { '/api': { target: 'http://127.0.0.1:8080', xfwd: true } },
   },
 }))

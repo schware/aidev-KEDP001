@@ -25,10 +25,16 @@ type Point struct {
 type Card struct {
 	ID, Name, Cycle string
 	Unit            *string
-	Latest          *Point
+	// Decimals는 소수 자릿수(indicator_display.number_format의 decimals, 0~4)다. 없으면 nil이다.
+	Decimals *int
+	Latest   *Point
 }
 
 const unitExpr = `coalesce(nullif(i.unit, ''), nullif(i.source_unit, ''))`
+
+// decimalsExpr는 화면 설정 d의 소수 자릿수다. 숫자가 아니면 NULL이다.
+const decimalsExpr = `CASE WHEN jsonb_typeof(d.number_format->'decimals') = 'number'
+		       THEN (d.number_format->>'decimals')::numeric::int END`
 
 // latestJoin은 지표 i의 마지막 관측값 o(value, period_start)다.
 const latestJoin = `
@@ -43,7 +49,7 @@ const latestJoin = `
 // Cards는 노출(is_visible)된 지표를 순서(sort_order, 그다음 id)대로 읽는다.
 func (s *Store) Cards(ctx context.Context) ([]Card, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT i.id, i.name, i.cycle, `+unitExpr+`, o.value, o.period_start
+		SELECT i.id, i.name, i.cycle, `+unitExpr+`, `+decimalsExpr+`, o.value, o.period_start
 		FROM indicator i
 		JOIN indicator_display d ON d.indicator_id = i.id`+latestJoin+`
 		WHERE d.is_visible
@@ -55,7 +61,7 @@ func (s *Store) Cards(ctx context.Context) ([]Card, error) {
 		var c Card
 		var value *float64
 		var period *time.Time
-		err := row.Scan(&c.ID, &c.Name, &c.Cycle, &c.Unit, &value, &period)
+		err := row.Scan(&c.ID, &c.Name, &c.Cycle, &c.Unit, &c.Decimals, &value, &period)
 		c.Latest = point(value, period)
 		return c, err
 	})
@@ -80,6 +86,8 @@ type Detail struct {
 	ID, Name, Cycle, StatCode string
 	SourceCode, SourceName    string
 	Unit, Notice              *string
+	// Decimals는 소수 자릿수다(Card와 같다).
+	Decimals *int
 	// ChartPeriod는 차트 기간(PostgreSQL interval 글, 예: 10 years)이다. 화면 설정이 없으면 nil이다.
 	ChartPeriod *string
 	Latest      *Point
@@ -100,7 +108,7 @@ func (s *Store) Detail(ctx context.Context, id string, today time.Time, recent i
 	var value *float64
 	var period *time.Time
 	err := s.pool.QueryRow(ctx, `
-		SELECT i.id, i.name, i.cycle, i.stat_code, src.code, src.name, `+unitExpr+`,
+		SELECT i.id, i.name, i.cycle, i.stat_code, src.code, src.name, `+unitExpr+`, `+decimalsExpr+`,
 		       d.notice, d.chart_period::text, o.value, o.period_start,
 		       (SELECT max(r.finished_at) FROM collection_run r
 		        WHERE r.indicator_id = i.id AND r.status = 'success')
@@ -108,7 +116,7 @@ func (s *Store) Detail(ctx context.Context, id string, today time.Time, recent i
 		JOIN source src ON src.code = i.source_code
 		LEFT JOIN indicator_display d ON d.indicator_id = i.id`+latestJoin+`
 		WHERE i.id = $1`, id).Scan(
-		&d.ID, &d.Name, &d.Cycle, &d.StatCode, &d.SourceCode, &d.SourceName, &d.Unit,
+		&d.ID, &d.Name, &d.Cycle, &d.StatCode, &d.SourceCode, &d.SourceName, &d.Unit, &d.Decimals,
 		&d.Notice, &d.ChartPeriod, &value, &period, &d.LastCollectedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Detail{}, ErrNotFound

@@ -62,14 +62,14 @@ func get(t *testing.T, st Store, now time.Time, method, path string) (int, strin
 
 func TestCards(t *testing.T) {
 	st := &fakeStore{cards: []store.Card{
-		{ID: "ecos-base-rate", Name: "기준금리", Cycle: "M", Unit: ptr("연%"),
+		{ID: "ecos-base-rate", Name: "기준금리", Cycle: "M", Unit: ptr("연%"), Decimals: ptr(2),
 			Latest: &store.Point{Period: date("2026-09-01"), Value: 2.5}},
 		{ID: "data-go-kr-kodex-200", Name: "KODEX 200", Cycle: "D"},
 	}}
 	code, body := get(t, st, time.Now(), http.MethodGet, "/api/indicators")
 	want := `{"indicators":[` +
-		`{"id":"ecos-base-rate","name":"기준금리","cycle":"M","unit":"연%","latest":{"period":"2026-09-01","value":2.5}},` +
-		`{"id":"data-go-kr-kodex-200","name":"KODEX 200","cycle":"D","unit":null,"latest":null}]}`
+		`{"id":"ecos-base-rate","name":"기준금리","cycle":"M","unit":"연%","decimals":2,"latest":{"period":"2026-09-01","value":2.5}},` +
+		`{"id":"data-go-kr-kodex-200","name":"KODEX 200","cycle":"D","unit":null,"decimals":null,"latest":null}]}`
 	if code != http.StatusOK || body != want {
 		t.Errorf("got %d %s\nwant %s", code, body, want)
 	}
@@ -85,7 +85,7 @@ func TestCardsEmpty(t *testing.T) {
 func TestDetail(t *testing.T) {
 	st := &fakeStore{detail: map[string]store.Detail{"ecos-base-rate": {
 		ID: "ecos-base-rate", Name: "기준금리", Cycle: "M", StatCode: "722Y001",
-		SourceCode: "ecos", SourceName: "ECOS", Unit: ptr("연%"), ChartPeriod: ptr("10 years"),
+		SourceCode: "ecos", SourceName: "ECOS", Unit: ptr("연%"), Decimals: ptr(0), ChartPeriod: ptr("10 years"),
 		Latest:          &store.Point{Period: date("2026-09-01"), Value: 2.5},
 		LastCollectedAt: ptr(time.Date(2026, 10, 24, 21, 0, 3, 500, time.UTC)),
 		Chart:           []store.Point{{Period: date("2026-08-01"), Value: 2.5}, {Period: date("2026-09-01"), Value: 2.5}},
@@ -95,7 +95,7 @@ func TestDetail(t *testing.T) {
 	// 서울은 이미 다음 날이다.
 	now := time.Date(2026, 10, 29, 16, 30, 0, 0, time.UTC)
 	code, body := get(t, st, now, http.MethodGet, "/api/indicators/ecos-base-rate")
-	want := `{"id":"ecos-base-rate","name":"기준금리","cycle":"M","unit":"연%","notice":null,` +
+	want := `{"id":"ecos-base-rate","name":"기준금리","cycle":"M","unit":"연%","decimals":0,"notice":null,` +
 		`"source":{"code":"ecos","name":"ECOS"},"stat_code":"722Y001","last_collected_at":"2026-10-25T06:00:03+09:00",` +
 		`"latest":{"period":"2026-09-01","value":2.5},"chart_period":"10 years",` +
 		`"chart":[{"period":"2026-08-01","value":2.5},{"period":"2026-09-01","value":2.5}],` +
@@ -117,7 +117,7 @@ func TestDetailEmpty(t *testing.T) {
 		ID: "x", Name: "X", Cycle: "A", StatCode: "S", SourceCode: "kosis", SourceName: "KOSIS",
 	}}}
 	code, body := get(t, st, time.Now(), http.MethodGet, "/api/indicators/x")
-	want := `{"id":"x","name":"X","cycle":"A","unit":null,"notice":null,"source":{"code":"kosis","name":"KOSIS"},` +
+	want := `{"id":"x","name":"X","cycle":"A","unit":null,"decimals":null,"notice":null,"source":{"code":"kosis","name":"KOSIS"},` +
 		`"stat_code":"S","last_collected_at":null,"latest":null,"chart_period":null,"chart":[],"recent":[],"related":[]}`
 	if code != http.StatusOK || body != want {
 		t.Errorf("got %d %s\nwant %s", code, body, want)

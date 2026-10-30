@@ -12,16 +12,19 @@ import (
 )
 
 // openTestDB는 KEDP_TEST_DB_NAME 시험 DB에 kedp_go로 접속한다. 변수가 없으면 시험을 건너뛴다.
-// 접속 정보(KEDP_DB_HOST, KEDP_DB_PORT, kedp_go)는 ../../../.env와 환경 변수에서 읽는다.
 // 시험 DB에는 migration 0001, 0002와 testdata/read.sql을 넣어 둔다(b-go-end/README.md).
-func openTestDB(t *testing.T) *Store {
+func openTestDB(t *testing.T) *Store { return openDB(t, "KEDP_TEST_DB_NAME") }
+
+// openDB는 변수 env가 가리키는 시험 DB에 kedp_go로 접속한다. 변수가 없으면 시험을 건너뛴다.
+// 접속 정보(KEDP_DB_HOST, KEDP_DB_PORT, kedp_go)는 ../../../.env와 환경 변수에서 읽는다.
+func openDB(t *testing.T, env string) *Store {
 	t.Helper()
-	name := os.Getenv("KEDP_TEST_DB_NAME")
+	name := os.Getenv(env)
 	if name == "" {
-		t.Skip("KEDP_TEST_DB_NAME is not set")
+		t.Skip(env + " is not set")
 	}
 	if name == "kedp" {
-		t.Fatal("KEDP_TEST_DB_NAME must not be kedp")
+		t.Fatal(env + " must not be kedp")
 	}
 	t.Setenv("KEDP_DB_NAME", name)
 	db, err := config.LoadDB("../../../.env")
@@ -59,7 +62,7 @@ func TestCards(t *testing.T) {
 	// 노출된 것만, sort_order 순서다. t-hidden(노출 안 함), t-bare(화면 설정 없음)는 없다.
 	want := []Card{
 		{ID: "t-pop", Name: "인구", Cycle: "A", Unit: ptr("명"), Latest: ptr(pt("2025-01-01", 51684564))},
-		{ID: "t-rate", Name: "금리", Cycle: "M", Unit: ptr("%"), Latest: ptr(pt("2026-09-01", 2.5))},
+		{ID: "t-rate", Name: "금리", Cycle: "M", Unit: ptr("%"), Decimals: ptr(2), Latest: ptr(pt("2026-09-01", 2.5))},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got  %+v\nwant %+v", got, want)
@@ -78,7 +81,7 @@ func TestDetail(t *testing.T) {
 	got.LastCollectedAt = nil
 	want := Detail{
 		ID: "t-rate", Name: "금리", Cycle: "M", StatCode: "722Y001", SourceCode: "ecos", SourceName: "ECOS",
-		Unit: ptr("%"), ChartPeriod: ptr("1 year"),
+		Unit: ptr("%"), Decimals: ptr(2), ChartPeriod: ptr("1 year"),
 		Latest: ptr(pt("2026-09-01", 2.5)),
 		// 2025-10-30 이후, 오래된 것부터. 이전 주기(Q) 값은 없다.
 		Chart:   []Point{pt("2025-11-01", 3), pt("2026-08-01", 2.75), pt("2026-09-01", 2.5)},

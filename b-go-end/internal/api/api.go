@@ -35,11 +35,12 @@ type Point struct {
 
 // Card는 메인 화면 카드 하나다.
 type Card struct {
-	ID     string  `json:"id"`
-	Name   string  `json:"name"`
-	Cycle  string  `json:"cycle"`
-	Unit   *string `json:"unit"`
-	Latest *Point  `json:"latest"`
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	Cycle    string  `json:"cycle"`
+	Unit     *string `json:"unit"`
+	Decimals *int    `json:"decimals"`
+	Latest   *Point  `json:"latest"`
 }
 
 // CardList는 GET /api/indicators의 응답이다.
@@ -65,6 +66,7 @@ type Detail struct {
 	Name     string  `json:"name"`
 	Cycle    string  `json:"cycle"`
 	Unit     *string `json:"unit"`
+	Decimals *int    `json:"decimals"`
 	Notice   *string `json:"notice"`
 	Source   Source  `json:"source"`
 	StatCode string  `json:"stat_code"`
@@ -94,7 +96,7 @@ func Handler(st Store, now func() time.Time, loc *time.Location) http.Handler {
 		out := CardList{Indicators: make([]Card, 0, len(cards))}
 		for _, c := range cards {
 			out.Indicators = append(out.Indicators, Card{
-				ID: c.ID, Name: c.Name, Cycle: c.Cycle, Unit: c.Unit, Latest: point(c.Latest),
+				ID: c.ID, Name: c.Name, Cycle: c.Cycle, Unit: c.Unit, Decimals: c.Decimals, Latest: point(c.Latest),
 			})
 		}
 		write(w, http.StatusOK, out)
@@ -110,7 +112,7 @@ func Handler(st Store, now func() time.Time, loc *time.Location) http.Handler {
 			return
 		}
 		out := Detail{
-			ID: d.ID, Name: d.Name, Cycle: d.Cycle, Unit: d.Unit, Notice: d.Notice,
+			ID: d.ID, Name: d.Name, Cycle: d.Cycle, Unit: d.Unit, Decimals: d.Decimals, Notice: d.Notice,
 			Source:      Source{Code: d.SourceCode, Name: d.SourceName},
 			StatCode:    d.StatCode,
 			Latest:      point(d.Latest),

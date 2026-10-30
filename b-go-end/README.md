@@ -4,7 +4,8 @@ Go 수집 모듈. 자세한 구조와 결정은 `docs/dev-complete/b-go-end.md`�
 
 | 명령 | 하는 일 |
 | --- | --- |
-| `cmd/server` | DB `indicator`의 지표를 수집 시각마다 수집하고, 응답을 Rust 처리 서버로 넘긴다. 사용자 조회 API도 연다 |
+| `cmd/server` | DB `indicator`의 지표를 수집 시각마다 수집하고, 응답을 Rust 처리 서버로 넘긴다. 사용자 조회 API와 관리자 API도 연다 |
+| `cmd/adminpass` | 관리자 계정 파일(`KEDP_ADMIN_FILE`)에 넣을 한 줄을 만든다 |
 | `cmd/seed` | `config/indicators.yaml`의 지표 정의와 화면 처음 값을 DB에 넣는다 |
 | `cmd/sample` | 요청 값을 바로 넣어 부르고, 받은 응답을 그대로 저장한다(조사용 샘플) |
 | `cmd/fakesource` | 시험용 제공처 서버. `../samples/`의 응답을 돌려준다 |
@@ -17,9 +18,11 @@ Go 수집 모듈. 자세한 구조와 결정은 `docs/dev-complete/b-go-end.md`�
 | `KEDP_DB_HOST`, `KEDP_DB_PORT`, `KEDP_DB_NAME` | DB 접속 정보(`b-sql-db/README.md`) | `server`, `seed` |
 | `kedp_go` | `kedp_go` 계정 비밀번호(KEDP001-D022 14) | `server`, `seed` |
 | `KEDP_PROCESSOR_ADDR` | Rust 처리 서버 주소(IP:포트). 비우면 `127.0.0.1:50051` | `server` |
-| `KEDP_API_ADDR` | 조회 API 주소(IP:포트). 비우면 `127.0.0.1:8080` | `server` |
+| `KEDP_API_ADDR` | 조회 API 주소(IP:포트). 비우면 `127.0.0.1:8080`. 관리자 API도 같은 주소다 | `server` |
+| `KEDP_ADMIN_ALLOW_IPS` | 관리자 API를 쓸 수 있는 IP 또는 CIDR, 쉼표로 나눈다. 비우면 관리자 API는 모두 403 | `server` |
+| `KEDP_ADMIN_FILE` | 관리자 계정 파일 위치(절대 경로). 비우면 로그인할 수 없다 | `server` |
 
-- 오류와 기록에는 변수 이름만 나오고 값(키, 접속 정보, 비밀번호, Rust 주소, API 주소)은 나오지 않는다.
+- 오류와 기록에는 변수 이름만 나오고 값(키, 접속 정보, 비밀번호, Rust 주소, API 주소, 허용 IP, 계정 파일 위치)은 나오지 않는다.
 
 ## 지표 넣기 (`cmd/seed`)
 
@@ -92,6 +95,51 @@ $P < b-go-end/internal/store/testdata/read.sql
 (cd b-go-end && KEDP_TEST_DB_NAME=kedp_api_check go test -count=1 ./internal/store)
 docker exec kedp-postgres dropdb -U sunmoon kedp_api_check
 ```
+
+관리자 API의 DB 일(`internal/store/admin_test.go`)은 `KEDP_ADMIN_TEST_DB_NAME`이 있을 때만 돈다. 시험이 값을 바꾸므로 돌릴 때마다 DB를 새로 만든다.
+
+```sh
+cd /srv/projects/aidev-kedp001
+P="docker exec -i kedp-postgres psql -X -q -v ON_ERROR_STOP=1 -U sunmoon -d kedp_admin_check"
+docker exec kedp-postgres createdb -U sunmoon kedp_admin_check
+$P < b-sql-db/migrations/0001_schema.up.sql
+$P < b-sql-db/migrations/0002_roles.up.sql
+$P < b-go-end/internal/store/testdata/admin.sql
+(cd b-go-end && KEDP_ADMIN_TEST_DB_NAME=kedp_admin_check go test -count=1 ./internal/store)
+docker exec kedp-postgres dropdb -U sunmoon kedp_admin_check
+```
+
+## 관리자 API (`internal/admin`)
+
+관리자 화면이 쓰는 API다. 주소, 요청, 응답, 오류, 확인 명령은 `specification/40.api/README.md` 5장을 본다.
+
+| 주소 | 하는 일 |
+| --- | --- |
+| `POST /api/admin/login`, `POST /api/admin/logout`, `GET /api/admin/session` | 로그인, 로그아웃, 로그인 상태 |
+| `GET /api/admin/indicators`, `POST /api/admin/indicators` | 전체 지표 목록, 지표 추가 |
+| `PUT /api/admin/indicators/{id}` | 지표 수정 |
+| `PUT /api/admin/display-order` | 노출과 순서 저장(전체 목록, 한 transaction) |
+| `GET /api/admin/collect-time`, `PUT /api/admin/collect-time` | 수집 시각 |
+| `GET /api/admin/sources` | 제공처별 키 설정 여부, 마지막 수집, 상태 |
+
+- 허용 IP(`KEDP_ADMIN_ALLOW_IPS`)가 아니면 403, 로그인하지 않았으면 401이다(KEDP001-D018).
+- 요청 주소는 `RemoteAddr`이고, `RemoteAddr`가 `127.0.0.1`(같은 서버의 proxy)일 때만 `X-Forwarded-For`의 마지막 주소를 쓴다.
+- session은 서버 메모리에 있다. 서버를 다시 켜면 다시 로그인한다.
+- 계정 파일은 서버를 켤 때 읽는다. 파일을 바꾸면 서버를 다시 켠다. `KEDP_ADMIN_FILE`이 있는데 파일을 읽지 못하거나 형식이 틀리면 서버가 시작하지 않는다.
+- 관리자가 바꾼 내용은 서버 기록에 `admin audit: account "…": …`로 남는다. 비밀번호와 cookie 값은 남기지 않는다.
+- 지표 삭제, API 키 변경, 재수집, 연결 시험 API는 없다.
+
+### 계정 파일 만들기 (`cmd/adminpass`)
+
+```sh
+go run ./cmd/adminpass -account <계정> > <계정 파일>    # 비밀번호를 두 번 입력한다(화면에 보이지 않는다)
+chmod 600 <계정 파일>
+```
+
+- 비밀번호는 12자 이상, 72바이트 이하다. bcrypt(cost 12) hash만 나온다. 비밀번호 원문은 어디에도 저장하지 않는다.
+- 출력은 파일에 넣을 한 줄 `계정:bcrypt hash`뿐이다(안내 글은 화면에만 나온다). 계정이 여럿이면 줄을 더한다.
+- 터미널에서만 돈다(입력을 화면에 보이지 않게 읽어야 해서).
+- 계정 파일은 저장소 밖에 둔다(예: `~/.config/kedp/admin`). Git에 올리지 않는다.
 
 ## Rust gRPC 코드 (`internal/kedpv1`)
 
@@ -207,7 +255,7 @@ go run ./cmd/sample -out ../samples/repository/check -list requests.yaml
 
 ## 테스트
 
-실제 API, DB, Rust 서버를 쓰지 않는다. `../samples/`의 받아 둔 응답과 시험용 HTTP 서버(httptest)만 쓴다.
+실제 API, DB, Rust 서버를 쓰지 않는다(시험 DB 시험은 변수가 있을 때만 돈다). `../samples/`의 받아 둔 응답과 시험용 HTTP 서버(httptest)만 쓴다.
 
 ```sh
 go test ./...
