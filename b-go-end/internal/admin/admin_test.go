@@ -375,9 +375,66 @@ func TestClientIP(t *testing.T) {
 		{"127.0.0.1:1", []string{" ::ffff:192.0.2.7 "}, "192.0.2.7"},
 		{"bad", nil, ""},
 	} {
-		got, ok := ClientIP(c.remote, c.xff)
+		got, ok := ClientIP(c.remote, c.xff, []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")})
 		if (c.want == "" && ok) || (c.want != "" && got.String() != c.want) {
 			t.Errorf("%s %v: got %v %t, want %s", c.remote, c.xff, got, ok, c.want)
+		}
+	}
+}
+
+// TestClientIPTrusted는 믿을 proxy(KEDP_TRUSTED_PROXIES)에서 온 요청만 X-Forwarded-For를 쓰는지 본다.
+func TestClientIPTrusted(t *testing.T) {
+	// compose의 nginx container가 있는 Docker 내부 network 같은 곳
+	trusted := []netip.Prefix{netip.MustParsePrefix("10.89.0.0/24"), netip.MustParsePrefix("192.0.2.53/32")}
+	for _, c := range []struct {
+		remote string
+		xff    []string
+		want   string
+	}{
+		{"10.89.0.5:1", []string{"203.0.113.9"}, "203.0.113.9"},
+		{"192.0.2.53:1", []string{"198.51.100.1, 203.0.113.9"}, "203.0.113.9"},
+		{"10.89.0.5:1", nil, "10.89.0.5"},
+		// 믿을 proxy가 아니면 X-Forwarded-For를 보지 않는다. 127.0.0.1도 목록에 없으면 믿지 않는다.
+		{"10.89.1.5:1", []string{"203.0.113.9"}, "10.89.1.5"},
+		{"127.0.0.1:1", []string{"203.0.113.9"}, "127.0.0.1"},
+		{"10.89.0.5:1", []string{"bad"}, ""},
+	} {
+		got, ok := ClientIP(c.remote, c.xff, trusted)
+		if (c.want == "" && ok) || (c.want != "" && got.String() != c.want) {
+			t.Errorf("%s %v: got %v %t, want %s", c.remote, c.xff, got, ok, c.want)
+		}
+	}
+	if _, ok := ClientIP("10.89.0.5:1", []string{"203.0.113.9"}, nil); !ok {
+		t.Error("nil trusted: want RemoteAddr")
+	}
+}
+
+// TestTrustedProxiesConfig는 Config.TrustedProxies로 허용 IP 검사가 바뀌는지 본다.
+func TestTrustedProxiesConfig(t *testing.T) {
+	x := newHarness(t, &fakeStore{})
+	x.h = Handler(Config{
+		Store:          x.st,
+		AllowIPs:       []netip.Prefix{netip.MustParsePrefix("192.0.2.0/24")},
+		TrustedProxies: []netip.Prefix{netip.MustParsePrefix("10.89.0.0/24")},
+		Accounts:       testAccounts(t),
+		Now:            func() time.Time { return x.now },
+		Loc:            seoul,
+	})
+	for _, c := range []struct {
+		remote, xff string
+		want        int
+	}{
+		// nginx(믿을 proxy)가 실제 접속 주소를 넘긴다.
+		{"10.89.0.5:40000", "192.0.2.20", http.StatusUnauthorized},
+		{"10.89.0.5:40000", "198.51.100.7", http.StatusForbidden},
+		// 믿지 않는 곳의 X-Forwarded-For는 보지 않는다(127.0.0.1도 목록에 없으면 같다).
+		{"127.0.0.1:40000", "192.0.2.20", http.StatusForbidden},
+		{"198.51.100.7:40000", "192.0.2.20", http.StatusForbidden},
+		{allowedAddr, "198.51.100.7", http.StatusUnauthorized},
+	} {
+		res := x.do(http.MethodGet, "/api/admin/session", "", c.remote, "", "X-Forwarded-For", c.xff)
+		if res.code != c.want {
+			t.Errorf("%s %q: got %d, want %d", c.remote, c.xff, res.code, c.want)
 		}
 	}
 }

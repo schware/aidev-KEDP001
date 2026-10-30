@@ -20,9 +20,10 @@ Go 수집 모듈. 자세한 구조와 결정은 `docs/dev-complete/b-go-end.md`�
 | `KEDP_PROCESSOR_ADDR` | Rust 처리 서버 주소(IP:포트). 비우면 `127.0.0.1:50051` | `server` |
 | `KEDP_API_ADDR` | 조회 API 주소(IP:포트). 비우면 `127.0.0.1:8080`. 관리자 API도 같은 주소다 | `server` |
 | `KEDP_ADMIN_ALLOW_IPS` | 관리자 API를 쓸 수 있는 IP 또는 CIDR, 쉼표로 나눈다. 비우면 관리자 API는 모두 403 | `server` |
+| `KEDP_TRUSTED_PROXIES` | `X-Forwarded-For`를 믿을 proxy의 IP 또는 CIDR, 쉼표로 나눈다. 비우면 `127.0.0.1`(개발용 Vite proxy) | `server` |
 | `KEDP_ADMIN_FILE` | 관리자 계정 파일 위치(절대 경로). 비우면 로그인할 수 없다 | `server` |
 
-- 오류와 기록에는 변수 이름만 나오고 값(키, 접속 정보, 비밀번호, Rust 주소, API 주소, 허용 IP, 계정 파일 위치)은 나오지 않는다.
+- 오류와 기록에는 변수 이름만 나오고 값(키, 접속 정보, 비밀번호, Rust 주소, API 주소, 허용 IP, 믿을 proxy, 계정 파일 위치)은 나오지 않는다.
 
 ## 지표 넣기 (`cmd/seed`)
 
@@ -123,7 +124,7 @@ docker exec kedp-postgres dropdb -U sunmoon kedp_admin_check
 | `GET /api/admin/sources` | 제공처별 키 설정 여부, 마지막 수집, 상태 |
 
 - 허용 IP(`KEDP_ADMIN_ALLOW_IPS`)가 아니면 403, 로그인하지 않았으면 401이다(KEDP001-D018).
-- 요청 주소는 `RemoteAddr`이고, `RemoteAddr`가 `127.0.0.1`(같은 서버의 proxy)일 때만 `X-Forwarded-For`의 마지막 주소를 쓴다.
+- 요청 주소는 `RemoteAddr`이고, `RemoteAddr`가 믿을 proxy(`KEDP_TRUSTED_PROXIES`, 비우면 `127.0.0.1`) 안에 있을 때만 `X-Forwarded-For`의 마지막 주소를 쓴다. 배포(`deploy/`)에서는 nginx가 있는 Docker 내부 network를 넣는다.
 - session은 서버 메모리에 있다. 서버를 다시 켜면 다시 로그인한다.
 - 계정 파일은 서버를 켤 때 읽는다. 파일을 바꾸면 서버를 다시 켠다. `KEDP_ADMIN_FILE`이 있는데 파일을 읽지 못하거나 형식이 틀리면 서버가 시작하지 않는다.
 - 관리자가 바꾼 내용은 서버 기록에 `admin audit: account "…": …`로 남는다. 비밀번호와 cookie 값은 남기지 않는다.

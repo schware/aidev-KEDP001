@@ -139,11 +139,12 @@ func run(ctx context.Context, envPath string, once bool, timeout time.Duration, 
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/api/admin/", admin.Handler(admin.Config{
-		Store:    st,
-		AllowIPs: adminConfig.AllowIPs,
-		Accounts: accounts,
-		KeySet:   map[string]bool{"ecos": keys.ECOS != "", "kosis": keys.KOSIS != "", "data-go-kr": keys.DataGoKr != ""},
-		Loc:      collect.Seoul,
+		Store:          st,
+		AllowIPs:       adminConfig.AllowIPs,
+		TrustedProxies: adminConfig.TrustedProxies,
+		Accounts:       accounts,
+		KeySet:         map[string]bool{"ecos": keys.ECOS != "", "kosis": keys.KOSIS != "", "data-go-kr": keys.DataGoKr != ""},
+		Loc:            collect.Seoul,
 	}))
 	mux.Handle("/", api.Handler(st, time.Now, collect.Seoul))
 	go func() {

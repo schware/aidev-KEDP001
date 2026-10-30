@@ -199,9 +199,40 @@ func TestLoadAdmin(t *testing.T) {
 func TestLoadAdminEmpty(t *testing.T) {
 	t.Setenv("KEDP_ADMIN_ALLOW_IPS", "")
 	t.Setenv("KEDP_ADMIN_FILE", "")
+	t.Setenv("KEDP_TRUSTED_PROXIES", "")
 	a, err := LoadAdmin(filepath.Join(t.TempDir(), "none"))
 	if err != nil || len(a.AllowIPs) != 0 || a.File != "" {
 		t.Errorf("got %+v %v", a.AllowIPs, err)
+	}
+	// 믿을 proxy가 비어 있으면 127.0.0.1(개발 서버의 Vite proxy)이다.
+	if len(a.TrustedProxies) != 1 || a.TrustedProxies[0] != DefaultTrustedProxy {
+		t.Errorf("TrustedProxies = %v", a.TrustedProxies)
+	}
+}
+
+func TestLoadAdminTrustedProxies(t *testing.T) {
+	t.Setenv("KEDP_TRUSTED_PROXIES", " 10.89.0.0/24 ,, 192.0.2.53,::ffff:198.51.100.1")
+	a, err := LoadAdmin(filepath.Join(t.TempDir(), "none"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, p := range a.TrustedProxies {
+		got = append(got, p.String())
+	}
+	want := []string{"10.89.0.0/24", "192.0.2.53/32", "198.51.100.1/32"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if s := fmt.Sprintf("%v %+v", a, a); strings.Contains(s, "10.89") {
+		t.Errorf("Admin printed values: %s", s)
+	}
+	for _, v := range []string{"10.0.0.300", "bad", "10.0.0.0/40"} {
+		t.Setenv("KEDP_TRUSTED_PROXIES", v)
+		_, err := LoadAdmin(filepath.Join(t.TempDir(), "none"))
+		if err == nil || strings.Contains(err.Error(), v) || !strings.Contains(err.Error(), "KEDP_TRUSTED_PROXIES") {
+			t.Errorf("%q: err = %v", v, err)
+		}
 	}
 }
 

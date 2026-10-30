@@ -48,6 +48,8 @@ type Config struct {
 	Store Store
 	// AllowIPs가 비어 있으면 모든 요청이 403이다.
 	AllowIPs []netip.Prefix
+	// TrustedProxies는 X-Forwarded-For를 믿을 proxy 주소다. 비어 있으면 127.0.0.1 하나다.
+	TrustedProxies []netip.Prefix
 	// Accounts가 비어 있으면 로그인할 수 없다.
 	Accounts Accounts
 	// KeySet은 제공처 코드별로 .env에 키가 있는지다. 키 값은 받지 않는다.
@@ -67,6 +69,9 @@ type server struct {
 func Handler(c Config) http.Handler {
 	if c.Now == nil {
 		c.Now = time.Now
+	}
+	if len(c.TrustedProxies) == 0 {
+		c.TrustedProxies = []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}
 	}
 	s := &server{Config: c}
 	mux := http.NewServeMux()
@@ -95,7 +100,7 @@ type Error struct {
 // allowIP는 허용 IP가 아닌 요청을 403으로 막는다(KEDP001-D018).
 func (s *server) allowIP(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		addr, ok := ClientIP(r.RemoteAddr, r.Header.Values("X-Forwarded-For"))
+		addr, ok := ClientIP(r.RemoteAddr, r.Header.Values("X-Forwarded-For"), s.TrustedProxies)
 		if !ok || !allowed(s.AllowIPs, addr) {
 			write(w, http.StatusForbidden, Error{Error: "forbidden"})
 			return
@@ -262,7 +267,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 			"account": req.Account == nil, "password": req.Password == nil})})
 		return
 	}
-	ip, _ := ClientIP(r.RemoteAddr, r.Header.Values("X-Forwarded-For"))
+	ip, _ := ClientIP(r.RemoteAddr, r.Header.Values("X-Forwarded-For"), s.TrustedProxies)
 	// 계정이 틀렸든 비밀번호가 틀렸든 같은 응답이다. 기록에도 받은 계정 이름을 넣지 않는다(비밀번호를 잘못 넣었을 수 있다).
 	if !s.Accounts.verify(*req.Account, *req.Password) {
 		log.Printf("admin: login failed from %s", ip)

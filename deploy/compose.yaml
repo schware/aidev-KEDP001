@@ -1,0 +1,80 @@
+# KEDP 실행 서버(macpro-debian) 구성: container 4개(KEDP001-D023).
+# 이 파일, .env, admin(관리자 계정 파일), backup.sh를 한 폴더에 두고 그 폴더에서 실행한다(README.md).
+# 바깥에는 nginx 포트(KEDP_HTTP_PORT)만 연다. 나머지는 내부 network(kedp)에서만 접속한다.
+name: kedp
+
+services:
+  postgres:
+    # dell-debian의 kedp-postgres와 같은 major 버전
+    image: postgres:17
+    environment:
+      # postgres container에는 .env 전체를 주지 않고 필요한 값만 준다.
+      POSTGRES_USER: ${KEDP_PG_SUPERUSER:?KEDP_PG_SUPERUSER is not set}
+      POSTGRES_PASSWORD: ${KEDP_PG_SUPERUSER_PASSWORD:?KEDP_PG_SUPERUSER_PASSWORD is not set}
+      POSTGRES_DB: kedp
+      TZ: Asia/Seoul
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [kedp]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -q -U \"$$POSTGRES_USER\" -d kedp"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  rust:
+    image: kedp-rust:${KEDP_IMAGE_TAG:?KEDP_IMAGE_TAG is not set}
+    # rust는 API 키를 쓰지 않으므로 .env 전체를 주지 않고 DB 비밀번호만 준다(KEDP001-D012).
+    # 주소는 container 구성에 따라 정해진다.
+    environment:
+      kedp_rust: ${kedp_rust:?kedp_rust is not set}
+      KEDP_DB_HOST: postgres
+      KEDP_DB_PORT: "5432"
+      KEDP_DB_NAME: kedp
+      KEDP_PROCESSOR_ADDR: 0.0.0.0:50051
+    networks: [kedp]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  go:
+    image: kedp-go:${KEDP_IMAGE_TAG:?KEDP_IMAGE_TAG is not set}
+    env_file: .env
+    environment:
+      KEDP_DB_HOST: postgres
+      KEDP_DB_PORT: "5432"
+      KEDP_DB_NAME: kedp
+      KEDP_PROCESSOR_ADDR: rust:50051
+      KEDP_API_ADDR: 0.0.0.0:8080
+      KEDP_ADMIN_FILE: /run/kedp/admin
+      # nginx가 있는 내부 network에서 온 요청만 X-Forwarded-For를 믿는다(40.api 5.1).
+      KEDP_TRUSTED_PROXIES: ${KEDP_NET_SUBNET:?KEDP_NET_SUBNET is not set}
+    volumes:
+      - ./admin:/run/kedp/admin:ro
+    networks: [kedp]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rust:
+        condition: service_started
+    # 시작할 때 Rust Check가 실패하면 멈추므로(Rust가 아직 뜨지 않았을 때 등) 다시 띄운다.
+    restart: unless-stopped
+
+  nginx:
+    image: kedp-nginx:${KEDP_IMAGE_TAG:?KEDP_IMAGE_TAG is not set}
+    ports:
+      - "${KEDP_HTTP_PORT:-80}:80"
+    networks: [kedp]
+    depends_on: [go]
+    restart: unless-stopped
+
+networks:
+  kedp:
+    ipam:
+      config:
+        - subnet: ${KEDP_NET_SUBNET:?KEDP_NET_SUBNET is not set}
+
+volumes:
+  pgdata:

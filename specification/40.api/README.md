@@ -22,7 +22,7 @@
 | 인증 | 사용자 조회 API는 없다. 관리자 API는 허용 IP + 로그인(5장) |
 | DB | `kedp_go` 계정. 사용자 조회 API는 읽기만 한다 |
 
-Vite proxy 예(`vite.config.ts`). `xfwd: true`는 관리자 API가 허용 IP를 보는 데 쓴다(5.1):
+Vite proxy 예(`vite.config.ts`). `xfwd: true`는 관리자 API가 허용 IP를 보는 데 쓴다(5.1). 배포에서는 nginx가 같은 일을 한다(`deploy/README.md`):
 
 ```ts
 server: { proxy: { '/api': { target: 'http://127.0.0.1:8080', xfwd: true } } }
@@ -187,7 +187,7 @@ curl -s -i http://127.0.0.1:8080/api/indicators/none     # 404
 | --- | --- |
 | 경로 | 모두 `/api/admin/`으로 시작한다 |
 | 허용 IP | `.env`의 `KEDP_ADMIN_ALLOW_IPS`(쉼표로 나눈 IP 또는 CIDR). 비어 있으면 관리자 API는 모두 403이다 |
-| 요청 주소 | `RemoteAddr`로 본다. `RemoteAddr`가 `127.0.0.1`(같은 서버의 proxy)일 때만 `X-Forwarded-For`의 마지막 주소를 쓴다. 개발용 Vite proxy는 `xfwd: true`로 둔다 |
+| 요청 주소 | `RemoteAddr`로 본다. `RemoteAddr`가 믿을 proxy(`.env`의 `KEDP_TRUSTED_PROXIES`, 쉼표로 나눈 IP 또는 CIDR) 안에 있을 때만 `X-Forwarded-For`의 마지막 주소를 쓴다. `KEDP_TRUSTED_PROXIES`가 비어 있으면 `127.0.0.1`(같은 서버의 proxy)이다. 개발용 Vite proxy는 `xfwd: true`로 둔다. 배포의 nginx는 `X-Forwarded-For`를 실제 접속 주소로 덮어써서 넘기고, 믿을 proxy에는 Docker 내부 network를 넣는다(`deploy/README.md`) |
 | 계정 | `.env`의 `KEDP_ADMIN_FILE`이 가리키는 파일 하나. 한 줄에 `계정:bcrypt hash`. 비밀번호 원문은 어디에도 저장하지 않는다. 한 줄은 `cmd/adminpass`로 만든다(`b-go-end/README.md`). 서버를 켤 때 읽는다 |
 | session | 로그인하면 서버 메모리에 session을 두고 cookie로 준다. 서버를 다시 켜면 다시 로그인한다 |
 | cookie | 이름 `kedp_admin_session`, 무작위 32바이트, `HttpOnly`, `SameSite=Strict`, `Path=/api/admin`, 8시간(로그인한 때부터). `Secure`는 배포 Issue에서 HTTPS와 함께 켠다 |
