@@ -17,7 +17,7 @@ import (
 
 const (
 	baseURL = "https://apis.data.go.kr/1160100/GetSecuritiesProductInfoService_V2/getETFPriceInfo_V2"
-	// 한 번에 받는 최대 행 수. 넘으면 Parse가 오류를 낸다(페이지 나누기는 아직 없다).
+	// 한 페이지의 행 수. 전체 행 수가 넘으면 나누어 받는다(KEDP001-D022 21).
 	pageSize = 1000
 	// 기간(basDt) 형식
 	dateLayout = "20060102"
@@ -94,7 +94,7 @@ func priceURL(key string, req source.Request, endBasDt string) string {
 	q.Set("serviceKey", key)
 	q.Set("resultType", "json")
 	q.Set("numOfRows", strconv.Itoa(pageSize))
-	q.Set("pageNo", "1")
+	q.Set("pageNo", strconv.Itoa(req.PageNumber()))
 	// likeSrtnCd는 부분 일치 검색이다. 6자리 종목 코드로는 그 종목만 온다(2026-10-25 세 종목 확인).
 	q.Set("likeSrtnCd", req.Indicator.StatCode)
 	q.Set("beginBasDt", req.Start)
@@ -102,9 +102,21 @@ func priceURL(key string, req source.Request, endBasDt string) string {
 	return baseURL + "?" + q.Encode()
 }
 
-// Check는 정상 응답인지 확인하고 행 수를 돌려준다.
-func (s *Source) Check(body []byte) (int, error) {
-	return source.Count(Parse(body))
+// LastPage는 totalCount로 마지막 페이지 번호를 돌려준다. 읽을 수 없으면 1이다.
+func (s *Source) LastPage(body []byte) int {
+	var r priceResponse
+	if json.Unmarshal(body, &r) != nil || r.Response == nil {
+		return 1
+	}
+	return source.Pages(r.Response.Body.TotalCount, pageSize)
+}
+
+// Period는 t를 기간(basDt) 형식으로 돌려준다. 이 API에는 일 주기만 있다.
+func (s *Source) Period(cycle string, t time.Time) (string, error) {
+	if cycle != "D" {
+		return "", source.UnsupportedCycle(s.Name(), cycle)
+	}
+	return t.Format(dateLayout), nil
 }
 
 // Row는 getETFPriceInfo_V2 응답의 한 행(종목 하나의 하루)이다. 값은 응답 그대로 문자열로 둔다.
@@ -152,7 +164,7 @@ type priceResponse struct {
 	} `json:"OpenAPI_ServiceResponse"`
 }
 
-// Parse는 getETFPriceInfo_V2 응답을 읽는다. 오류 응답이면 *source.APIError를 돌려준다(예: 30 등록되지 않은 서비스키).
+// Parse는 getETFPriceInfo_V2 응답(한 페이지)을 읽는다. 오류 응답이면 *source.APIError를 돌려준다(예: 30 등록되지 않은 서비스키).
 // 데이터가 없으면 이 API는 정상 코드(00)와 totalCount 0을 주는데, 다른 제공처와 맞추려고 NoData 오류로 돌려준다.
 func Parse(body []byte) ([]Row, error) {
 	var r priceResponse
@@ -172,9 +184,6 @@ func Parse(body []byte) ([]Row, error) {
 	}
 	if b.TotalCount == 0 {
 		return nil, &source.APIError{Source: "data-go-kr", Code: h.ResultCode, Message: "totalCount 0", NoData: true}
-	}
-	if err := source.RequireAllRows("data-go-kr", len(b.Items.Item), b.TotalCount); err != nil {
-		return nil, err
 	}
 	return b.Items.Item, nil
 }

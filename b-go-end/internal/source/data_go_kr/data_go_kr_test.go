@@ -89,15 +89,35 @@ func TestParseErrors(t *testing.T) {
 	if _, err := Parse([]byte(`{}`)); err == nil {
 		t.Error("empty object: want error")
 	}
-	if _, err := Parse([]byte(`{"response":{"header":{"resultCode":"00"},"body":{"totalCount":2,"items":{"item":[{}]}}}}`)); err == nil {
-		t.Error("partial page: want error")
+}
+
+func TestLastPage(t *testing.T) {
+	s := New("", nil)
+	cases := map[string]int{
+		string(readSample(t, "114800-D-20260901-20261022.json")):                                     1,
+		string(readSample(t, "nodata-totalCount-0.json")):                                            1,
+		string(readSample(t, "error-30.json")):                                                       1,
+		`{"response":{"header":{"resultCode":"00"},"body":{"totalCount":1001,"items":{"item":[]}}}}`: 2,
+	}
+	for body, want := range cases {
+		if got := s.LastPage([]byte(body)); got != want {
+			t.Errorf("LastPage(%.40s) = %d, want %d", body, got, want)
+		}
+	}
+	// 1000행이 넘는 응답의 첫 페이지도 읽는다.
+	if rows, err := Parse([]byte(`{"response":{"header":{"resultCode":"00"},"body":{"totalCount":2,"items":{"item":[{}]}}}}`)); err != nil || len(rows) != 1 {
+		t.Errorf("first page: %d rows, %v", len(rows), err)
 	}
 }
 
-func TestCheck(t *testing.T) {
-	n, err := New("", nil).Check(readSample(t, "114800-D-20260901-20261022.json"))
-	if err != nil || n != 34 {
-		t.Errorf("Check = %d, %v", n, err)
+func TestPeriod(t *testing.T) {
+	s := New("", nil)
+	day := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
+	if got, err := s.Period("D", day); err != nil || got != "20261030" {
+		t.Errorf("Period(D) = %q, %v", got, err)
+	}
+	if _, err := s.Period("M", day); err == nil {
+		t.Error("M: want error")
 	}
 }
 
@@ -158,6 +178,10 @@ func TestPriceURL(t *testing.T) {
 	}
 	if got := req.SampleName(); got != "069500-D-20260901-20261022.json" {
 		t.Errorf("SampleName = %s", got)
+	}
+	req.Page = 2
+	if got := priceURL("k", req, end); !strings.Contains(got, "&pageNo=2&") {
+		t.Errorf("page 2: priceURL = %s", got)
 	}
 }
 

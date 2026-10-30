@@ -1,7 +1,12 @@
-# 지표 정보 (DB가 생기기 전까지 임시, KEDP001-D021)
+# 지표 정보와 화면 처음 값. DB(indicator, indicator_display)에 넣는 처음 값이다(cmd/seed, KEDP001-D021, D022).
+# 수집은 DB의 indicator만 읽는다. DB에 넣은 뒤 바꿀 것은 DB(관리자 화면)에서 바꾼다.
 # 항목 코드는 ECOS StatisticItemList, KOSIS getMeta(type=ITM) 응답으로 확인한 값만 적는다.
-# KOSIS: stat_code=tblId(orgId 101), item_code=itmId, classes=objL1…, cycle=prdSe
-# 공공데이터포털(getETFPriceInfo_V2): stat_code=srtnCd(종목 코드), item_code 없음, cycle=D(일 단위만 있다. 요청에는 넣지 않는다)
+# CPI, GDP, 외환보유액은 항목 코드를 확인하지 못해 넣지 않는다(나중에 관리자 화면에서 추가).
+#
+# KOSIS: org_id=orgId, stat_code=tblId, item_code=itmId, classes=objL1…
+# 공공데이터포털(getETFPriceInfo_V2): stat_code=srtnCd(종목 코드), item_code 없음, value_field=clpr(KEDP001-D022 8)
+# cycle: D/M/Q/A. 연은 A이고, KOSIS에 요청할 때만 Y로 바꾼다(KEDP001-D022 3).
+# display.chart_period: 상세 화면 차트 기간(PostgreSQL interval). 관측값이 없을 때 처음 수집할 과거 범위다(KEDP001-D022 12).
 indicators:
   - id: ecos-base-rate
     name: 한국은행 기준금리
@@ -9,45 +14,66 @@ indicators:
     stat_code: 722Y001
     item_code: "0101000"
     cycle: M
+    display: { visible: true, order: 1, chart_period: 10 years }
 
   - id: kosis-employment-rate
     name: 고용률(15세 이상)
     source: kosis
+    org_id: "101"
     stat_code: DT_1DA7001S
     item_code: T90
     classes: ["0"] # 성별: 계
     cycle: M
-
-  - id: kosis-births
-    name: 출생아 수
-    source: kosis
-    stat_code: INH_1B8000F_01
-    item_code: T1
-    classes: ["11"] # 기본항목별: 출생아수(명)
-    cycle: Y
+    display: { visible: true, order: 2, chart_period: 10 years }
 
   - id: kosis-total-population
     name: 총인구
     source: kosis
+    org_id: "101"
     stat_code: DT_1IN1502
     item_code: T100
     classes: ["00"] # 행정구역별: 전국
-    cycle: Y
+    cycle: A
+    display: { visible: true, order: 3, chart_period: 20 years }
+
+  - id: kosis-births
+    name: 출생아 수
+    source: kosis
+    org_id: "101"
+    stat_code: INH_1B8000F_01
+    item_code: T1
+    classes: ["11"] # 기본항목별: 출생아수(명)
+    cycle: A
+    display: { visible: true, order: 4, chart_period: 20 years }
 
   - id: data-go-kr-kodex-200
     name: KODEX 200
     source: data-go-kr
     stat_code: "069500"
+    value_field: clpr
     cycle: D
+    display: { visible: true, order: 5, chart_period: 1 year }
 
   - id: data-go-kr-kodex-leverage
     name: KODEX 레버리지
     source: data-go-kr
     stat_code: "122630"
+    value_field: clpr
     cycle: D
+    display:
+      visible: true
+      order: 6
+      chart_period: 1 year
+      notice: 이 정보는 신뢰할 수 없습니다. 투자 판단에 사용하지 마십시오.
 
   - id: data-go-kr-kodex-inverse
     name: KODEX 인버스
     source: data-go-kr
     stat_code: "114800"
+    value_field: clpr
     cycle: D
+    display:
+      visible: true
+      order: 7
+      chart_period: 1 year
+      notice: 이 정보는 신뢰할 수 없습니다. 투자 판단에 사용하지 마십시오.

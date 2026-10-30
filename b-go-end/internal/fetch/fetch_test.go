@@ -142,3 +142,43 @@ func TestSave(t *testing.T) {
 		t.Errorf("saved = %s", b)
 	}
 }
+
+func TestHasKey(t *testing.T) {
+	c := New(time.Second, key)
+	if !c.HasKey([]byte(`{"url":"/api/abc%2B%2F%3DKEY"}`)) || c.HasKey([]byte(`{"ok":true}`)) {
+		t.Error("HasKey")
+	}
+}
+
+// SetHost를 하면 경로와 질의는 그대로 두고 시험용 서버로 보낸다. 기록에는 바꾼 주소를 가려서 남긴다.
+func TestSetHost(t *testing.T) {
+	captureLog(t)
+	var gotPath, gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotQuery = r.URL.EscapedPath(), r.URL.RawQuery
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	c := New(time.Second, key)
+	if err := c.SetHost(srv.URL); err != nil {
+		t.Fatal(err)
+	}
+
+	var got Exchange
+	ctx := WithRecorder(context.Background(), func(e Exchange) { got = e })
+	if _, err := c.Get(ctx, "https://ecos.bok.or.kr/api/x?apiKey=k&a=1"); err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/api/x" || gotQuery != "apiKey=k&a=1" {
+		t.Errorf("path = %s, query = %s", gotPath, gotQuery)
+	}
+	if !strings.HasPrefix(got.URL, srv.URL+"/api/x?") {
+		t.Errorf("recorded url = %s", got.URL)
+	}
+
+	for _, bad := range []string{"", "127.0.0.1:1", "http://"} {
+		if err := c.SetHost(bad); err == nil {
+			t.Errorf("SetHost(%q): want error", bad)
+		}
+	}
+}

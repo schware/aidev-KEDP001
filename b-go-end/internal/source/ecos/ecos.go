@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/fetch"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/source"
@@ -14,7 +15,7 @@ import (
 
 const (
 	baseURL = "https://ecos.bok.or.kr/api"
-	// 한 번에 받는 최대 행 수. 넘으면 Parse가 오류를 낸다(페이지 나누기는 아직 없다).
+	// 한 페이지의 행 수. 전체 행 수가 넘으면 나누어 받는다(KEDP001-D022 21).
 	pageSize = 1000
 )
 
@@ -34,11 +35,13 @@ func (s *Source) Fetch(ctx context.Context, req source.Request) ([]byte, error) 
 }
 
 // searchURL은 키가 들어간 요청 주소를 만든다. 이 주소는 fetch.Client를 거쳐서만 기록한다.
+// 요청 시작·끝 행 번호는 req.Page 페이지의 것이다.
 // 분류(Classes)가 있으면 ITEM_CODE2, ITEM_CODE3… 자리에 차례로 붙인다.
 func searchURL(key string, req source.Request) string {
 	ind := req.Indicator
-	u := fmt.Sprintf("%s/StatisticSearch/%s/json/kr/1/%d/%s/%s/%s/%s/%s",
-		baseURL, url.PathEscape(key), pageSize,
+	page := req.PageNumber()
+	u := fmt.Sprintf("%s/StatisticSearch/%s/json/kr/%d/%d/%s/%s/%s/%s/%s",
+		baseURL, url.PathEscape(key), (page-1)*pageSize+1, page*pageSize,
 		url.PathEscape(ind.StatCode), url.PathEscape(ind.Cycle),
 		url.PathEscape(req.Start), url.PathEscape(req.End), url.PathEscape(ind.ItemCode))
 	for _, c := range ind.Classes {
@@ -80,15 +83,35 @@ type searchResponse struct {
 	} `json:"RESULT"`
 }
 
-// Check는 정상 응답인지 확인하고 행 수를 돌려준다.
-func (s *Source) Check(body []byte) (int, error) {
-	return source.Count(Parse(body))
+// LastPage는 list_total_count로 마지막 페이지 번호를 돌려준다. 읽을 수 없으면 1이다.
+func (s *Source) LastPage(body []byte) int {
+	var r searchResponse
+	if json.Unmarshal(body, &r) != nil || r.StatisticSearch == nil {
+		return 1
+	}
+	return source.Pages(r.StatisticSearch.ListTotalCount, pageSize)
+}
+
+// Period는 t가 들어 있는 기간을 ECOS 요청 형식으로 돌려준다(설계서 5.1).
+// D 20261001, M 202401, Q 2025Q1, A 2023
+func (s *Source) Period(cycle string, t time.Time) (string, error) {
+	switch cycle {
+	case "D":
+		return t.Format("20060102"), nil
+	case "M":
+		return t.Format("200601"), nil
+	case "Q":
+		return fmt.Sprintf("%dQ%d", t.Year(), source.Quarter(t)), nil
+	case "A":
+		return t.Format("2006"), nil
+	}
+	return "", source.UnsupportedCycle(s.Name(), cycle)
 }
 
 // noDataCode는 "해당하는 데이터가 없음" 오류 코드다.
 const noDataCode = "INFO-200"
 
-// Parse는 StatisticSearch 응답을 읽는다. ECOS 오류 응답이면 *source.APIError를 돌려준다(예: INFO-100 인증키 오류).
+// Parse는 StatisticSearch 응답(한 페이지)을 읽는다. ECOS 오류 응답이면 *source.APIError를 돌려준다(예: INFO-100 인증키 오류).
 func Parse(body []byte) ([]Row, error) {
 	var r searchResponse
 	if err := json.Unmarshal(body, &r); err != nil {
@@ -99,9 +122,6 @@ func Parse(body []byte) ([]Row, error) {
 	}
 	if r.StatisticSearch == nil {
 		return nil, errors.New("ecos: response has neither StatisticSearch nor RESULT")
-	}
-	if err := source.RequireAllRows("ecos", len(r.StatisticSearch.Row), r.StatisticSearch.ListTotalCount); err != nil {
-		return nil, err
 	}
 	return r.StatisticSearch.Row, nil
 }
