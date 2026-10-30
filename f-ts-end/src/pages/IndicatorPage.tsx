@@ -42,7 +42,7 @@ function DetailView({ d }: { d: Detail }) {
         {d.latest ? (
           <>
             <p className="break-all">
-              <span className="text-3xl font-bold tabular-nums">{formatValue(d.latest.value)}</span>
+              <span className="text-3xl font-bold tabular-nums">{formatValue(d.latest.value, d.decimals)}</span>
               {d.unit && <span className="ml-1 text-slate-500">{d.unit}</span>}
             </p>
             <p className="mt-1 text-sm text-slate-500">{formatPeriod(d.latest.period, d.cycle)}</p>
@@ -54,7 +54,7 @@ function DetailView({ d }: { d: Detail }) {
 
       <Section title="추이">
         {d.chart.length > 0 ? (
-          <Chart points={d.chart} cycle={d.cycle} unit={d.unit} />
+          <Chart points={d.chart} cycle={d.cycle} unit={d.unit} decimals={d.decimals} />
         ) : (
           <p className="text-slate-400">차트에 보여줄 데이터가 없습니다</p>
         )}
@@ -73,7 +73,7 @@ function DetailView({ d }: { d: Detail }) {
               {d.recent.map((p) => (
                 <tr key={p.period} className="border-b border-slate-100 last:border-0">
                   <td className="py-1.5 pr-4 text-slate-600">{formatPeriod(p.period, d.cycle)}</td>
-                  <td className="py-1.5 text-right tabular-nums">{formatValue(p.value)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{formatValue(p.value, d.decimals)}</td>
                 </tr>
               ))}
             </tbody>

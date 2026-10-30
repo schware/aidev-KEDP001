@@ -42,7 +42,7 @@ function IndicatorCard({ card }: { card: Card }) {
       {card.latest ? (
         <>
           <p className="mt-2 break-all">
-            <span className="text-2xl font-bold tabular-nums">{formatValue(card.latest.value)}</span>
+            <span className="text-2xl font-bold tabular-nums">{formatValue(card.latest.value, card.decimals)}</span>
             {card.unit && <span className="ml-1 text-sm text-slate-500">{card.unit}</span>}
           </p>
           <p className="mt-1 text-xs text-slate-500">{formatPeriod(card.latest.period, card.cycle)}</p>
