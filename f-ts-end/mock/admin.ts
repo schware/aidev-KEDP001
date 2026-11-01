@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { AdminIndicator, SourceInfo } from '../src/admin/api.ts'
 import { fakes, sorted, type Fake } from './data.ts'
+import { adminVisits, resetVisits, setVisitBase } from './visits.ts'
 
 type Send = (res: ServerResponse, status: number, body?: unknown) => true
 
@@ -238,6 +239,24 @@ export async function handleAdmin(req: IncomingMessage, res: ServerResponse, pat
   if (route === '/sources') {
     if (method !== 'GET') return notAllowed('GET')
     return send(res, 200, { sources })
+  }
+  if (route === '/visits') {
+    if (method !== 'GET') return notAllowed('GET')
+    return send(res, 200, adminVisits())
+  }
+  if (route === '/visits/base') {
+    if (method !== 'PUT') return notAllowed('PUT')
+    const v = isObj(body) ? body.base : undefined
+    if (!(typeof v === 'number' && Number.isSafeInteger(v) && v >= 0)) {
+      return send(res, 400, { error: 'invalid input', fields: { base: 'must be an integer from 0 to 9007199254740991' } })
+    }
+    setVisitBase(v)
+    return send(res, 200, adminVisits())
+  }
+  if (route === '/visits/reset') {
+    if (method !== 'POST') return notAllowed('POST')
+    resetVisits()
+    return send(res, 200, adminVisits())
   }
   return send(res, 404, { error: 'not found' })
 }

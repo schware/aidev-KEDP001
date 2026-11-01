@@ -61,3 +61,15 @@ export function FormErrors({ errors, known, message }: { errors: Record<string, 
     </div>
   )
 }
+
+/** 읽기 실패와 [다시 읽기]. */
+export function LoadError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <p className="text-slate-500">
+      불러오지 못했습니다.{' '}
+      <button type="button" className={buttonClass} onClick={onRetry}>
+        다시 읽기
+      </button>
+    </p>
+  )
+}

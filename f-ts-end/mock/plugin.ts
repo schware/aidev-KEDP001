@@ -1,9 +1,10 @@
 // npm run dev:mock에서만 쓰는 가짜 조회 API와 관리자 API. Go 서버 없이 화면을 확인한다.
-// 주소와 오류 응답은 specification/40.api/README.md 1.4, 2장, 3장, 5장과 같다.
+// 주소와 오류 응답은 specification/40.api/README.md 1.4, 2장, 3장, 5장, 6장과 같다.
 import type { ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
 import { handleAdmin } from './admin.ts'
 import { cards, detail } from './data.ts'
+import { addVisit, visitSummary } from './visits.ts'
 
 function send(res: ServerResponse, status: number, body?: unknown): true {
   res.statusCode = status
@@ -22,6 +23,26 @@ export function mockApi(): Plugin {
         if (path.startsWith('/admin/')) {
           handleAdmin(req, res, path, send).catch(next)
           return
+        }
+        // 방문자 수(40.api 6.2, 6.3). MOCK_VISITS=error면 500(footer 숫자가 숨는지 본다).
+        if (path === '/visits' || path === '/visits/summary') {
+          res.setHeader('Cache-Control', 'no-store')
+          if (process.env.MOCK_VISITS === 'error') return send(res, 500, { error: 'internal error' })
+          if (path === '/visits') {
+            if (req.method !== 'POST') {
+              res.setHeader('Allow', 'POST')
+              return send(res, 405, { error: 'method not allowed' })
+            }
+            addVisit()
+            res.statusCode = 204
+            res.end()
+            return
+          }
+          if (req.method !== 'GET' && req.method !== 'HEAD') {
+            res.setHeader('Allow', 'GET, HEAD')
+            return send(res, 405, { error: 'method not allowed' })
+          }
+          return send(res, 200, visitSummary())
         }
         if (req.method !== 'GET' && req.method !== 'HEAD') {
           res.setHeader('Allow', 'GET, HEAD')

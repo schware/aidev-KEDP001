@@ -83,6 +83,20 @@ export interface SourceList {
   sources: SourceInfo[]
 }
 
+/** 하루의 방문자 수(40.api 6.4). day는 Asia/Seoul 날짜(YYYY-MM-DD)다. */
+export interface VisitDay {
+  day: string
+  count: number
+}
+
+/** 관리자 방문자 수(40.api 6.4~6.6의 응답). days는 최근 30일, 오래된 날부터다. */
+export interface AdminVisits {
+  today: number
+  total: number
+  base: number
+  days: VisitDay[]
+}
+
 const base = '/api/admin'
 export const loginPath = `${base}/login`
 export const logoutPath = `${base}/logout`
@@ -91,6 +105,9 @@ export const indicatorsPath = `${base}/indicators`
 export const displayOrderPath = `${base}/display-order`
 export const collectTimePath = `${base}/collect-time`
 export const sourcesPath = `${base}/sources`
+export const visitsPath = `${base}/visits`
+export const visitBasePath = `${base}/visits/base`
+export const visitResetPath = `${base}/visits/reset`
 
 export function indicatorPath(id: string): string {
   return `${indicatorsPath}/${encodeURIComponent(id)}`

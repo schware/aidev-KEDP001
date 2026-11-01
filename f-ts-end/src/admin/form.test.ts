@@ -6,6 +6,7 @@ import {
   editBody,
   emptyAddForm,
   parseClasses,
+  parseVisitBase,
   settingsFromIndicator,
   sourceFields,
   validateAdd,
@@ -181,5 +182,21 @@ describe('collectTimeError', () => {
     expect(collectTimeError('24:00')).not.toBeNull()
     expect(collectTimeError('07:60')).not.toBeNull()
     expect(collectTimeError('0730')).not.toBeNull()
+  })
+})
+
+describe('parseVisitBase: 방문자 수 시작값', () => {
+  it('0 이상 정수', () => {
+    expect(parseVisitBase('0')).toEqual({ value: 0 })
+    expect(parseVisitBase(' 3000 ')).toEqual({ value: 3000 })
+    expect(parseVisitBase('9007199254740991')).toEqual({ value: 9007199254740991 })
+  })
+  it('음수, 소수, 쉼표, 빈 값, 글자는 안 된다', () => {
+    for (const t of ['-1', '1.5', '1,000', '', ' ', 'abc', '1e3', '+1']) {
+      expect(parseVisitBase(t), t).toHaveProperty('error')
+    }
+  })
+  it('너무 큰 수는 안 된다', () => {
+    expect(parseVisitBase('9007199254740992')).toEqual({ error: '너무 큰 수입니다' })
   })
 })

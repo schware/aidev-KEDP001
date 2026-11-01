@@ -13,7 +13,7 @@ import {
 } from './api.ts'
 import { useAdminAuth } from './auth.ts'
 import { collectTimeError } from './form.ts'
-import { buttonClass, Field, inputClass, primaryButtonClass } from './ui.tsx'
+import { buttonClass, Field, inputClass, LoadError, primaryButtonClass } from './ui.tsx'
 import { useAdminGet } from './useAdminGet.ts'
 
 /** API 관리(/admin/api, 50.web 6장). 키 값을 넣거나 보여 주는 칸은 없다. */
@@ -48,17 +48,6 @@ export function ApiPage() {
         )}
       </section>
     </div>
-  )
-}
-
-function LoadError({ onRetry }: { onRetry: () => void }) {
-  return (
-    <p className="text-slate-500">
-      불러오지 못했습니다.{' '}
-      <button type="button" className={buttonClass} onClick={onRetry}>
-        다시 읽기
-      </button>
-    </p>
   )
 }
 

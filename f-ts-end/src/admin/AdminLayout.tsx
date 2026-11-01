@@ -6,7 +6,7 @@ import { AdminAuthContext, type AdminAuth } from './auth.ts'
 import { buttonClass, Forbidden } from './ui.tsx'
 
 /**
- * 로그인해야 들어오는 관리자 화면(/admin/dashboard, /admin/api)의 틀.
+ * 로그인해야 들어오는 관리자 화면(/admin/dashboard, /admin/api, /admin/visits)의 틀.
  * 들어올 때 GET /api/admin/session으로 확인한다. 401이면 로그인 화면으로, 403이면 "허용된 주소가 아닙니다"만 보인다.
  */
 export function AdminLayout() {
@@ -56,6 +56,7 @@ export function AdminLayout() {
             <nav className="flex gap-4 text-sm">
               <MenuLink to="/admin/dashboard">Dashboard 관리</MenuLink>
               <MenuLink to="/admin/api">API 관리</MenuLink>
+              <MenuLink to="/admin/visits">접속 통계</MenuLink>
             </nav>
             <div className="ml-auto flex items-center gap-3 text-sm text-slate-500">
               <span>{auth.session.account}</span>
