@@ -77,22 +77,22 @@ deploy/send.sh <SSH Host 이름> <tag>
 - 서버 시간대 Asia/Seoul(`timedatectl`). crontab의 03:00이 서버 시각이다
 - 인터넷에서 `postgres:17` image를 받을 수 있다. 받을 수 없으면 dell-debian에서 `docker save postgres:17 | gzip -1 | ssh <Host> 'gunzip | docker load'`
 
-폴더 구조(예: `/srv/kedp`. 다른 곳이어도 된다):
+폴더 구조(예: `/srv/projects/kedp`. 다른 곳이어도 된다):
 
 ```text
-/srv/kedp/              compose 폴더. 여기서 docker compose를 실행한다
+/srv/projects/kedp/              compose 폴더. 여기서 docker compose를 실행한다
 ├── compose.yaml        저장소 deploy/compose.yaml
 ├── backup.sh           저장소 deploy/backup.sh (실행 권한)
 ├── .env                chmod 600. 아래 ".env"
 └── admin               관리자 계정 파일. 소유자 65532, chmod 400
-/srv/kedp-backup/       백업 파일(KEDP_BACKUP_DIR). compose 폴더 밖에 둔다
+/srv/projects/kedp-backup/       백업 파일(KEDP_BACKUP_DIR). compose 폴더 밖에 둔다
 ```
 
 ```sh
 # macpro-debian
-sudo mkdir -p /srv/kedp /srv/kedp-backup
-sudo chown "$USER": /srv/kedp /srv/kedp-backup
-chmod 700 /srv/kedp-backup
+sudo mkdir -p /srv/projects/kedp /srv/projects/kedp-backup
+sudo chown "$USER": /srv/projects/kedp /srv/projects/kedp-backup
+chmod 700 /srv/projects/kedp-backup
 ```
 
 ### .env
@@ -108,7 +108,7 @@ chmod 700 /srv/kedp-backup
 | `KEDP_NET_SUBNET` | 새로 정한다. Docker 내부 network 대역(사설 CIDR, 예: `/24` 하나). `docker network inspect`와 `ip route`로 보아 서버의 다른 대역과 겹치지 않게 한다 |
 | `KEDP_HTTP_PORT` | 바깥에 열 포트. 비우면 80 |
 | `KEDP_IMAGE_TAG` | 띄울 image tag(`build.sh`가 알려 준 tag) |
-| `KEDP_BACKUP_DIR` | 백업 폴더 절대 경로(예: `/srv/kedp-backup`) |
+| `KEDP_BACKUP_DIR` | 백업 폴더 절대 경로(예: `/srv/projects/kedp-backup`) |
 
 dell-debian과 달라지는 주소는 `compose.yaml`이 정한다. `.env`에 있어도 쓰지 않으므로 넣지 않아도 된다.
 
@@ -134,10 +134,10 @@ dell-debian에서 만들어 보낸다(macpro-debian에는 Go가 없다).
 cd /srv/projects/aidev-kedp001/b-go-end
 go run ./cmd/adminpass -account <계정> > ~/kedp-admin    # 비밀번호를 두 번 입력한다
 chmod 600 ~/kedp-admin
-scp ~/kedp-admin <Host>:/srv/kedp/admin && rm ~/kedp-admin
+scp ~/kedp-admin <Host>:/srv/projects/kedp/admin && rm ~/kedp-admin
 
 # macpro-debian: go container(사용자 65532)만 읽게 한다
-sudo chown 65532:65532 /srv/kedp/admin && sudo chmod 400 /srv/kedp/admin
+sudo chown 65532:65532 /srv/projects/kedp/admin && sudo chmod 400 /srv/projects/kedp/admin
 ```
 
 계정 파일을 바꾸면 `docker compose restart go`를 한다.
@@ -152,7 +152,7 @@ dell-debian의 kedp DB(계정 `kedp_go`, `kedp_rust` 포함)를 macpro-debian으
 cd /srv/projects/aidev-kedp001
 deploy/build.sh                         # tag를 적어 둔다
 deploy/send.sh <Host> <tag>
-scp deploy/compose.yaml deploy/backup.sh <Host>:/srv/kedp/
+scp deploy/compose.yaml deploy/backup.sh <Host>:/srv/projects/kedp/
 ```
 
 ### 4.2 dell-debian: 수집 멈추고 dump
@@ -180,22 +180,22 @@ docker exec kedp-postgres psql -X -U "$SU" -d kedp -At -c \
    union all select 'collection_run', count(*) from collection_run union all select 'raw_response', count(*) from raw_response"
 
 # 6) 보내기
-scp ~/kedp-move/roles.sql ~/kedp-move/kedp.dump <Host>:/srv/kedp-backup/
+scp ~/kedp-move/roles.sql ~/kedp-move/kedp.dump <Host>:/srv/projects/kedp-backup/
 ```
 
 ### 4.3 macpro-debian: postgres만 띄워 되살리기
 
 ```sh
-cd /srv/kedp
+cd /srv/projects/kedp
 chmod 600 .env
 docker compose up -d postgres
 docker compose ps postgres                              # healthy가 될 때까지 기다린다
 
 # 계정 먼저, 그다음 DB
 PSQL='psql -X -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d kedp'
-docker compose exec -T postgres sh -c "$PSQL" < /srv/kedp-backup/roles.sql
+docker compose exec -T postgres sh -c "$PSQL" < /srv/projects/kedp-backup/roles.sql
 docker compose exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d kedp --no-owner --exit-on-error' \
-  < /srv/kedp-backup/kedp.dump
+  < /srv/projects/kedp-backup/kedp.dump
 
 # 4.2 5)와 같은 행 수인지 본다
 docker compose exec -T postgres sh -c "$PSQL -At" <<'SQL'
@@ -204,7 +204,7 @@ union all select 'collection_run', count(*) from collection_run union all select
 SQL
 
 # 계정 비밀번호가 .env와 맞는지(go, rust가 접속할 수 있는지)는 4.4에서 확인한다
-rm /srv/kedp-backup/roles.sql                          # 비밀번호 hash가 들어 있다
+rm /srv/projects/kedp-backup/roles.sql                          # 비밀번호 hash가 들어 있다
 ```
 
 ### 4.4 macpro-debian: 나머지 띄우기와 확인
@@ -215,7 +215,7 @@ docker compose ps                                       # 4개 모두 running, p
 docker compose logs --tail 20 go rust                   # go: "processor check ok", "server started"
 ```
 
-확인(5장)을 모두 한 뒤 `/srv/kedp-backup/kedp.dump`를 지우고, 백업 crontab(6장)을 등록한다. dell-debian의 `~/kedp-move`도 지운다.
+확인(5장)을 모두 한 뒤 `/srv/projects/kedp-backup/kedp.dump`를 지우고, 백업 crontab(6장)을 등록한다. dell-debian의 `~/kedp-move`도 지운다.
 
 - dell-debian의 개발용 수집 서버를 다시 켜면 dell-debian DB에도 수집한다(두 곳에서 수집). 필요할 때만 켠다.
 
@@ -260,13 +260,13 @@ docker compose logs --since 24h go | grep -E 'collection|server started' | tail
 `backup.sh`는 postgres container에서 `pg_dump -Fc`로 kedp를 받아 `KEDP_BACKUP_DIR/kedp-YYYYMMDD.dump`(하루 1개)로 두고, 14일보다 오래된 `kedp-*.dump`를 지운다.
 
 ```sh
-/srv/kedp/backup.sh            # 한 번 돌려 본다. "backup: /srv/kedp-backup/kedp-20261101.dump (… bytes)"
+/srv/projects/kedp/backup.sh            # 한 번 돌려 본다. "backup: /srv/projects/kedp-backup/kedp-20261101.dump (… bytes)"
 ```
 
 crontab(`crontab -e`, 매일 03:00):
 
 ```text
-0 3 * * * /srv/kedp/backup.sh >> /srv/kedp-backup/backup.log 2>&1
+0 3 * * * /srv/projects/kedp/backup.sh >> /srv/projects/kedp-backup/backup.log 2>&1
 ```
 
 - crontab의 PATH에 `docker`가 있어야 한다(`/usr/bin/docker`면 기본 PATH로 된다).
@@ -277,8 +277,8 @@ crontab(`crontab -e`, 매일 03:00):
 kedp DB를 지우고 백업 파일로 다시 만든다. 지금 값은 사라진다.
 
 ```sh
-cd /srv/kedp
-F=/srv/kedp-backup/kedp-YYYYMMDD.dump
+cd /srv/projects/kedp
+F=/srv/projects/kedp-backup/kedp-YYYYMMDD.dump
 docker compose stop nginx go rust
 docker compose exec -T postgres sh -c 'dropdb -U "$POSTGRES_USER" kedp && createdb -U "$POSTGRES_USER" kedp'
 docker compose exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d kedp --exit-on-error' < "$F"
@@ -292,10 +292,10 @@ docker compose up -d
 cd /srv/projects/aidev-kedp001 && git switch main && git pull
 deploy/build.sh                                 # 새 tag
 deploy/send.sh <Host> <새 tag>
-scp deploy/compose.yaml deploy/backup.sh <Host>:/srv/kedp/    # 바뀌었을 때만
+scp deploy/compose.yaml deploy/backup.sh <Host>:/srv/projects/kedp/    # 바뀌었을 때만
 
 # macpro-debian
-cd /srv/kedp
+cd /srv/projects/kedp
 sed -i 's/^KEDP_IMAGE_TAG=.*/KEDP_IMAGE_TAG=<새 tag>/' .env
 docker compose up -d                            # image가 바뀐 container만 다시 만든다
 docker compose ps && docker compose logs --tail 20 go
@@ -310,14 +310,14 @@ docker compose ps && docker compose logs --tail 20 go
 
 ```sh
 # dell-debian
-scp b-sql-db/migrations/NNNN_name.up.sql <Host>:/srv/kedp-backup/
+scp b-sql-db/migrations/NNNN_name.up.sql <Host>:/srv/projects/kedp-backup/
 
 # macpro-debian: 백업 → 수집 멈춤 → 적용 → 새 image로 띄우기
-cd /srv/kedp
+cd /srv/projects/kedp
 ./backup.sh
 docker compose stop go
 docker compose exec -T postgres sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d kedp' \
-  < /srv/kedp-backup/NNNN_name.up.sql
+  < /srv/projects/kedp-backup/NNNN_name.up.sql
 # .env의 KEDP_IMAGE_TAG를 새 tag로 바꾼 뒤
 docker compose up -d
 ```
@@ -330,7 +330,7 @@ docker compose up -d
 이전 tag로 다시 띄운다.
 
 ```sh
-cd /srv/kedp
+cd /srv/projects/kedp
 docker images 'kedp-*'                                       # 남아 있는 tag
 sed -i 's/^KEDP_IMAGE_TAG=.*/KEDP_IMAGE_TAG=<이전 tag>/' .env
 docker compose up -d
