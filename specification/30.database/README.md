@@ -110,7 +110,7 @@
 
 # 4. 테이블
 
-정의는 `b-sql-db/migrations/0001_schema.up.sql`이 기준이다. 아래는 칼럼의 뜻과 규칙만 적는다.
+정의는 `b-sql-db/migrations/0001_schema.up.sql`(방문자 수는 `0003_visits.up.sql`)이 기준이다. 아래는 칼럼의 뜻과 규칙만 적는다.
 
 | 테이블 | 역할 | 주요 칼럼 |
 | --- | --- | --- |
@@ -118,11 +118,12 @@
 | `indicator` | 지표 정의. `indicators.yaml`을 대신한다 | `id`(예: `ecos-base-rate`, 화면 주소 `/indicator/{id}`에도 사용. 소문자·숫자·`-`만), `name`, `source_code`, `org_id`(KOSIS), `stat_code`, `item_code`(공공데이터포털은 비움), `classes`(text 배열, KOSIS objL1…), `value_field`(공공데이터포털 값 항목, `clpr`), `cycle`(D/M/Q/A), `unit`(관리자 단위), `source_unit`(응답 단위), `created_at`, `updated_at` |
 | `indicator_display` | 화면 설정 (Dashboard 관리) | `indicator_id`, `is_visible`(기본 꺼짐), `sort_order`, `chart_period`(interval, 예: `10 years`), `number_format`(jsonb), `date_format`, `notice`(안내 문구, 없으면 비움) |
 | `indicator_relation` | 관련 지표 | `indicator_id`, `related_indicator_id`, `sort_order`. 자기 자신은 넣지 못한다 |
-| `app_setting` | 전체 설정 | `key`, `value`, `updated_at`. migration이 `collect_time` = `06:00`(Asia/Seoul, KEDP001-D019)을 넣는다 |
+| `app_setting` | 전체 설정 | `key`, `value`, `updated_at`. migration이 `collect_time` = `06:00`(Asia/Seoul, KEDP001-D019), `visit_total_base` = `0`(전체 방문자 수의 시작값, 0003)을 넣는다 |
 | `collection_run` | 수집 실행 기록. 마지막 수집 일시와 연결 상태의 근거 | `id`, `source_code`, `indicator_id`(제공처 전체 실행이면 비움), `started_at`, `finished_at`, `status`(`running`, `success`, `no_data`, `error`), `error_code`(예: `INFO-100`, `11`, `30`), `row_count`, `trigger`(`schedule`, `manual`) |
 | `observation` | 관측값 (화면이 읽는 값) | `indicator_id`, `cycle`, `period_start`(date, 5.1), `period_raw`(응답 원문), `value`(numeric), `value_raw`(응답 문자열), `source_changed_at`(KOSIS `LST_CHN_DE`, 다른 곳은 비움), `collected_at`, `run_id`. 기본 키: `indicator_id` + `cycle` + `period_start` |
 | `observation_history` | 고쳐진 값의 이전 값 (5.2) | `id`, `indicator_id`, `cycle`, `period_start`, `old_value`, `new_value`, `changed_at`, `run_id`(새 값을 가져온 수집) |
 | `raw_response` | 원본 응답 (5.3) | `id`, `run_id`, `received_at`, `request_masked`(키 자리 `***`), `http_status`, `body`(jsonb), `body_text`(JSON이 아닌 응답) |
+| `visit_daily` | 날짜별 방문자 수 (4.2) | `day`(date, Asia/Seoul, 기본 키), `count`(integer, 0 이상) |
 
 참고:
 
@@ -136,15 +137,29 @@
 
 ## 4.1 접속 계정과 권한 (결정 14)
 
-정의는 `b-sql-db/migrations/0002_roles.up.sql`이 기준이다. 비밀번호는 저장소에 쓰지 않는다. migration을 적용한 뒤 소유자가 psql의 `\password`로 정한다.
+정의는 `b-sql-db/migrations/0002_roles.up.sql`(방문자 수는 `0003_visits.up.sql`)이 기준이다. 비밀번호는 저장소에 쓰지 않는다. migration을 적용한 뒤 소유자가 psql의 `\password`로 정한다.
 
 | 계정 | 쓰기 | 읽기만 |
 | --- | --- | --- |
-| `kedp_go` | `indicator`, `indicator_display`, `indicator_relation`, `app_setting`(추가·수정·삭제), `collection_run`(추가·수정) | `source`, `observation`(조회 API) |
+| `kedp_go` | `indicator`, `indicator_display`, `indicator_relation`, `app_setting`, `visit_daily`(추가·수정·삭제), `collection_run`(추가·수정) | `source`, `observation`(조회 API) |
 | `kedp_rust` | `observation`(추가·수정), `observation_history`(트리거가 추가), `raw_response`(추가) | `source`, `indicator` |
 
 - `kedp_rust`는 `observation`, `raw_response`도 읽을 수 있다(덮어쓰기와 재처리).
 - 테이블을 만들고 고치는 일(migration)은 소유자 계정으로 한다.
+- `kedp_rust`는 `visit_daily`를 쓰지도 읽지도 않는다.
+
+## 4.2 방문자 수 (Issue #48)
+
+| 항목 | 내용 |
+| --- | --- |
+| 저장하는 것 | 날짜별 숫자(`visit_daily`)와 전체 시작값(`app_setting`의 `visit_total_base`)뿐이다 |
+| 저장하지 않는 것 | 접속 주소(IP), User-Agent, 같은 사람을 알아보는 hash. Go 메모리에만 있고 날이 바뀌면 버린다(`specification/40.api/README.md` 6장) |
+| 하루 | Asia/Seoul 00:00~24:00. `day`는 그 날짜다 |
+| 오늘 | 오늘 `day`의 `count`. 행이 없으면 0 |
+| 전체 | `visit_total_base` + `visit_daily`의 `count` 합 |
+| 늘리기 | 한 문장: `INSERT INTO visit_daily (day, count) VALUES (…, 1) ON CONFLICT (day) DO UPDATE SET count = visit_daily.count + 1` |
+| 시작값 | 관리자가 바꾼다(0 이상 정수). 예전 숫자를 이어 쓸 때 쓴다 |
+| 초기화 | 관리자가 한다. `visit_daily`를 모두 지우고 `visit_total_base`를 0으로 한다(한 transaction) |
 
 ---
 

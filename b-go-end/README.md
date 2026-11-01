@@ -92,6 +92,7 @@ P="docker exec -i kedp-postgres psql -X -q -v ON_ERROR_STOP=1 -U sunmoon -d kedp
 docker exec kedp-postgres createdb -U sunmoon kedp_api_check
 $P < b-sql-db/migrations/0001_schema.up.sql
 $P < b-sql-db/migrations/0002_roles.up.sql
+$P < b-sql-db/migrations/0003_visits.up.sql
 $P < b-go-end/internal/store/testdata/read.sql
 (cd b-go-end && KEDP_TEST_DB_NAME=kedp_api_check go test -count=1 ./internal/store)
 docker exec kedp-postgres dropdb -U sunmoon kedp_api_check
@@ -105,9 +106,41 @@ P="docker exec -i kedp-postgres psql -X -q -v ON_ERROR_STOP=1 -U sunmoon -d kedp
 docker exec kedp-postgres createdb -U sunmoon kedp_admin_check
 $P < b-sql-db/migrations/0001_schema.up.sql
 $P < b-sql-db/migrations/0002_roles.up.sql
+$P < b-sql-db/migrations/0003_visits.up.sql
 $P < b-go-end/internal/store/testdata/admin.sql
 (cd b-go-end && KEDP_ADMIN_TEST_DB_NAME=kedp_admin_check go test -count=1 ./internal/store)
 docker exec kedp-postgres dropdb -U sunmoon kedp_admin_check
+```
+
+## 방문자 수 API (`internal/api/visits.go`, Issue #48)
+
+주소, 요청, 응답, 오류, 확인 명령은 `specification/40.api/README.md` 6장을 본다.
+
+| 주소 | 하는 일 |
+| --- | --- |
+| `POST /api/visits` | 방문 하나. 그날 이미 센 사람이면 세지 않는다(204) |
+| `GET /api/visits/summary` | 오늘과 전체 방문자 수 |
+| `GET /api/admin/visits` | 관리자: 오늘, 전체, 시작값, 최근 30일 |
+| `PUT /api/admin/visits/base` | 관리자: 전체 시작값 바꾸기 |
+| `POST /api/admin/visits/reset` | 관리자: 일별 기록을 지우고 시작값을 0으로 |
+
+- 같은 사람은 접속 주소 + User-Agent + 그날의 salt로 만든 hash로 알아본다. salt와 hash 목록은 서버 메모리에만 있고 날이 바뀌면(Asia/Seoul 00:00) 버린다. 서버를 다시 켜면 그날 숫자는 DB에 남지만 hash 목록은 사라진다.
+- 접속 주소는 관리자 API와 같은 방법(`KEDP_TRUSTED_PROXIES`)으로 구한다.
+- 접속 주소, User-Agent, hash는 DB, 파일, 서버 기록에 남기지 않는다. DB(`visit_daily`, `app_setting`의 `visit_total_base`)에는 날짜별 숫자와 시작값만 쓴다.
+
+### 시험 DB로 확인
+
+`internal/store/visit_test.go`는 `KEDP_VISIT_TEST_DB_NAME`이 있을 때만 돈다. 시험이 값을 바꾸므로 돌릴 때마다 DB를 새로 만든다.
+
+```sh
+cd /srv/projects/aidev-kedp001
+P="docker exec -i kedp-postgres psql -X -q -v ON_ERROR_STOP=1 -U sunmoon -d kedp_visit_check"
+docker exec kedp-postgres createdb -U sunmoon kedp_visit_check
+$P < b-sql-db/migrations/0001_schema.up.sql
+$P < b-sql-db/migrations/0002_roles.up.sql
+$P < b-sql-db/migrations/0003_visits.up.sql
+(cd b-go-end && KEDP_VISIT_TEST_DB_NAME=kedp_visit_check go test -count=1 -run Visit ./internal/store)
+docker exec kedp-postgres dropdb -U sunmoon kedp_visit_check
 ```
 
 ## 관리자 API (`internal/admin`)
@@ -122,6 +155,7 @@ docker exec kedp-postgres dropdb -U sunmoon kedp_admin_check
 | `PUT /api/admin/display-order` | 노출과 순서 저장(전체 목록, 한 transaction) |
 | `GET /api/admin/collect-time`, `PUT /api/admin/collect-time` | 수집 시각 |
 | `GET /api/admin/sources` | 제공처별 키 설정 여부, 마지막 수집, 상태 |
+| `GET /api/admin/visits`, `PUT /api/admin/visits/base`, `POST /api/admin/visits/reset` | 방문자 수 관리(위 "방문자 수 API") |
 
 - 허용 IP(`KEDP_ADMIN_ALLOW_IPS`)가 아니면 403, 로그인하지 않았으면 401이다(KEDP001-D018).
 - 요청 주소는 `RemoteAddr`이고, `RemoteAddr`가 믿을 proxy(`KEDP_TRUSTED_PROXIES`, 비우면 `127.0.0.1`) 안에 있을 때만 `X-Forwarded-For`의 마지막 주소를 쓴다. 배포(`deploy/`)에서는 nginx가 있는 Docker 내부 network를 넣는다.

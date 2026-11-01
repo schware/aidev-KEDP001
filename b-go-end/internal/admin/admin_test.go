@@ -32,6 +32,12 @@ type fakeStore struct {
 	order       []store.OrderItem
 	collectTime string
 	runs        []store.SourceRun
+	// 방문자 수(visits_test.go)
+	visits     store.VisitStats
+	visitToday time.Time
+	visitDays  int
+	visitBase  *int64
+	reset      bool
 }
 
 func (f *fakeStore) AdminIndicators(context.Context) ([]store.AdminIndicator, error) {
@@ -177,6 +183,9 @@ var protected = []struct{ method, path, body string }{
 	{http.MethodGet, "/api/admin/collect-time", ""},
 	{http.MethodPut, "/api/admin/collect-time", "{}"},
 	{http.MethodGet, "/api/admin/sources", ""},
+	{http.MethodGet, "/api/admin/visits", ""},
+	{http.MethodPut, "/api/admin/visits/base", "{}"},
+	{http.MethodPost, "/api/admin/visits/reset", "{}"},
 }
 
 func TestNotAllowedIP(t *testing.T) {

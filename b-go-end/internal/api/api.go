@@ -1,7 +1,9 @@
-// Package api는 사용자 화면이 읽는 조회 API다(specification/40.api/README.md). DB는 읽기만 한다.
+// Package api는 사용자 화면이 쓰는 조회 API다(specification/40.api/README.md). 지표는 DB에서 읽기만 한다.
 //
 //	GET /api/indicators        메인 화면 카드 목록
 //	GET /api/indicators/{id}   지표 상세
+//
+// 방문자 수 API(POST /api/visits, GET /api/visits/summary)는 visits.go(VisitHandler)다.
 //
 // 화면 개발은 Vite proxy로 연결하므로 CORS 헤더는 두지 않는다.
 package api

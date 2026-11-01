@@ -10,6 +10,9 @@
 //	GET  /api/admin/collect-time       수집 시각
 //	PUT  /api/admin/collect-time       수집 시각 바꾸기
 //	GET  /api/admin/sources            제공처별 상태
+//	GET  /api/admin/visits             방문자 수(오늘, 전체, 시작값, 최근 30일)
+//	PUT  /api/admin/visits/base        전체 방문자 수의 시작값 바꾸기
+//	POST /api/admin/visits/reset       일별 기록을 지우고 시작값을 0으로
 //
 // 모든 요청은 허용 IP여야 하고(아니면 403), 로그인을 뺀 요청은 로그인해야 한다(아니면 401). KEDP001-D018.
 // 관리자가 바꾼 내용은 서버 기록(log)에 남긴다. 비밀번호와 cookie 값은 남기지 않는다.
@@ -41,6 +44,9 @@ type Store interface {
 	CollectTime(ctx context.Context) (string, error)
 	SetCollectTime(ctx context.Context, v string) (string, error)
 	SourceRuns(ctx context.Context) ([]store.SourceRun, error)
+	VisitStats(ctx context.Context, today time.Time, days int) (store.VisitStats, error)
+	SetVisitBase(ctx context.Context, base int64) (string, error)
+	ResetVisits(ctx context.Context) (store.VisitReset, error)
 }
 
 // Config는 관리자 API 설정이다.
@@ -85,6 +91,9 @@ func Handler(c Config) http.Handler {
 	mux.HandleFunc("/api/admin/collect-time", methods(map[string]http.HandlerFunc{
 		http.MethodGet: s.auth(s.getCollectTime), http.MethodPut: s.auth(s.setCollectTime)}))
 	mux.HandleFunc("/api/admin/sources", methods(map[string]http.HandlerFunc{http.MethodGet: s.auth(s.sources)}))
+	mux.HandleFunc("/api/admin/visits", methods(map[string]http.HandlerFunc{http.MethodGet: s.auth(s.getVisits)}))
+	mux.HandleFunc("/api/admin/visits/base", methods(map[string]http.HandlerFunc{http.MethodPut: s.auth(s.setVisitBase)}))
+	mux.HandleFunc("/api/admin/visits/reset", methods(map[string]http.HandlerFunc{http.MethodPost: s.auth(s.resetVisits)}))
 	mux.HandleFunc("/api/admin/", func(w http.ResponseWriter, r *http.Request) {
 		write(w, http.StatusNotFound, Error{Error: "not found"})
 	})
