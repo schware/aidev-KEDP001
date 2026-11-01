@@ -8,12 +8,14 @@ b-sql-db/
 │   ├── 0001_schema.up.sql     테이블 9개, 이력 트리거, 기본 행(source 3행, collect_time)
 │   ├── 0001_schema.down.sql
 │   ├── 0002_roles.up.sql      계정 kedp_go, kedp_rust와 권한
-│   └── 0002_roles.down.sql
+│   ├── 0002_roles.down.sql
+│   ├── 0003_visits.up.sql     방문자 수 visit_daily, 시작값 visit_total_base, kedp_go 권한
+│   └── 0003_visits.down.sql
 └── checks/
     └── smoke.sql              권한, 기간 검사, 이력 트리거, 원본 주소 검사 확인 (시험 DB 전용)
 ```
 
-- 적용은 번호 순서(0001 → 0002), 되돌리기는 반대 순서(0002 → 0001)로 한다.
+- 적용은 번호 순서(0001 → 0002 → 0003), 되돌리기는 반대 순서(0003 → 0002 → 0001)로 한다.
 - 파일마다 `BEGIN`/`COMMIT`으로 감싸 있어 중간에 실패하면 그 파일 전체가 적용되지 않는다.
 - 접속 정보와 비밀번호는 저장소에 쓰지 않는다. 계정 비밀번호는 적용한 뒤 소유자가 정한다(아래 "비밀번호").
 - PostgreSQL 11 이상이 필요하다(`EXECUTE FUNCTION`). 개발 서버는 PostgreSQL 17이다.
@@ -41,7 +43,10 @@ docker exec -it kedp-postgres psql -U sunmoon -d kedp
 K="docker exec -i kedp-postgres psql -X -v ON_ERROR_STOP=1 -U sunmoon -d kedp"
 $K < b-sql-db/migrations/0001_schema.up.sql
 $K < b-sql-db/migrations/0002_roles.up.sql
+$K < b-sql-db/migrations/0003_visits.up.sql
 ```
+
+이미 0001, 0002를 적용한 DB에는 0003만 적용한다. 배포 서버(macpro-debian)는 `deploy/README.md` 7장 "DB migration이 생겼을 때"를 따른다.
 
 ## 확인
 
@@ -49,7 +54,7 @@ $K < b-sql-db/migrations/0002_roles.up.sql
 $K -c '\dt' -c '\du kedp_*' -c '\dp'
 ```
 
-- `\dt`: 테이블 9개 (`app_setting`, `collection_run`, `indicator`, `indicator_display`, `indicator_relation`, `observation`, `observation_history`, `raw_response`, `source`)
+- `\dt`: 테이블 10개 (`app_setting`, `collection_run`, `indicator`, `indicator_display`, `indicator_relation`, `observation`, `observation_history`, `raw_response`, `source`, `visit_daily`)
 - `\du kedp_*`: 계정 `kedp_go`, `kedp_rust`
 - `\dp`: 테이블별 권한. 계정별 권한은 설계서 4.1과 같다
 
@@ -80,6 +85,7 @@ docker exec -it kedp-postgres psql -h 127.0.0.1 -U kedp_rust -d kedp -c 'select 
 
 ```sh
 P="docker exec -i kedp-postgres psql -X -v ON_ERROR_STOP=1 -U sunmoon -d kedp_migration_check"
+$P < b-sql-db/migrations/0003_visits.down.sql
 $P < b-sql-db/migrations/0002_roles.down.sql
 $P < b-sql-db/migrations/0001_schema.down.sql
 $P -c '\dt' -c '\du kedp_*'      # 테이블은 없어야 한다. 계정은 kedp에 적용돼 있으면 남는다(아래 참고)
@@ -94,6 +100,7 @@ P="docker exec -i kedp-postgres psql -X -v ON_ERROR_STOP=1 -U sunmoon -d kedp_mi
 docker exec kedp-postgres createdb -U sunmoon kedp_migration_check
 $P < b-sql-db/migrations/0001_schema.up.sql
 $P < b-sql-db/migrations/0002_roles.up.sql
+$P < b-sql-db/migrations/0003_visits.up.sql
 $P < b-sql-db/checks/smoke.sql   # NOTICE "ok: …" 5줄. 끝에 ROLLBACK하므로 데이터가 남지 않는다
 # 위 "되돌리기"를 한 뒤 다시 적용하고 smoke.sql을 한 번 더 돌린다
 docker exec kedp-postgres dropdb -U sunmoon kedp_migration_check

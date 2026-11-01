@@ -3,6 +3,7 @@
 - 상태: draft
 - 근거: KEDP001-D016(net/http), KEDP001-D017(MVP 범위), KEDP001-D022 9·11(단위, 주기), `specification/50.web/README.md` 2·3장, Issue #36
 - 관리자 API(5장) 근거: KEDP001-D012, D018, D019, D022, `specification/50.web/README.md` 1장 관리자, 4~6장, Issue #40
+- 방문자 수 API(6장) 근거: Issue #48
 - 구현: `b-go-end/internal/api`, `b-go-end/internal/store/read.go`, 관리자 API는 `b-go-end/internal/admin`, `b-go-end/internal/store/admin.go`
 
 화면(TypeScript)은 이 문서만 보고 API를 쓴다. ECOS·KOSIS·DB를 직접 부르지 않는다.
@@ -16,11 +17,11 @@
 | 서버 | Go `cmd/server`. 수집과 같은 프로그램에서 함께 돈다 |
 | 주소 | `.env`의 `KEDP_API_ADDR`. 비우면 `127.0.0.1:8080` |
 | 경로 | 모두 `/api/`로 시작한다 |
-| method | 사용자 조회 API는 `GET`만 받는다(`HEAD`도 된다). 관리자 API는 5장 |
+| method | 사용자 조회 API는 `GET`만 받는다(`HEAD`도 된다). 방문 세기(`POST /api/visits`)는 6장, 관리자 API는 5장 |
 | 응답 | JSON, `Content-Type: application/json; charset=utf-8` |
 | CORS | 두지 않는다. 화면 개발은 Vite proxy로 `/api`를 Go로 넘긴다 |
-| 인증 | 사용자 조회 API는 없다. 관리자 API는 허용 IP + 로그인(5장) |
-| DB | `kedp_go` 계정. 사용자 조회 API는 읽기만 한다 |
+| 인증 | 사용자 조회 API와 방문자 수 공개 API(6.2, 6.3)는 없다. 관리자 API는 허용 IP + 로그인(5장) |
+| DB | `kedp_go` 계정. 사용자 조회 API는 읽기만 한다. 방문 세기는 날짜별 숫자만 쓴다(6장) |
 
 Vite proxy 예(`vite.config.ts`). `xfwd: true`는 관리자 API가 허용 IP를 보는 데 쓴다(5.1). 배포에서는 nginx가 같은 일을 한다(`deploy/README.md`):
 
@@ -486,3 +487,135 @@ rm -f $J
 ```
 
 - 비밀번호에 `"`나 `\`가 있으면 위 `printf`로는 JSON이 깨진다. 그때는 `jq -n --arg a "$ADMIN_ACCOUNT" --arg p "$ADMIN_PASSWORD" '{account:$a,password:$p}'`로 만든다.
+
+---
+
+# 6. 방문자 수 API (Issue #48)
+
+공개 화면 아래쪽에 오늘 방문자 수와 전체 방문자 수를 보여주고, 관리자 화면에서 숫자를 관리한다. 구현은 `b-go-end/internal/api/visits.go`, `b-go-end/internal/admin/visits.go`, `b-go-end/internal/store/visit.go`, DB는 `specification/30.database/README.md` 4.2다.
+
+## 6.1 세는 기준
+
+| 항목 | 내용 |
+| --- | --- |
+| 방문자 | 한 사람(브라우저)이 하루에 여러 번 와도 1명 |
+| 하루 | Asia/Seoul 00:00~24:00 |
+| 화면이 할 일 | 처음 열릴 때 `POST /api/visits`를 한 번 부른다. 그날 이미 보냈으면 다시 보내지 않는다(브라우저에 날짜를 둔다) |
+| 같은 사람 | Go가 접속 주소 + User-Agent + 그날의 salt로 hash(HMAC-SHA256)를 만들어, 그날 본 hash면 세지 않는다 |
+| 접속 주소 | 관리자 허용 IP와 같은 방법이다(5.1 "요청 주소"): 믿을 proxy(`KEDP_TRUSTED_PROXIES`)에서 온 요청만 `X-Forwarded-For`의 마지막 주소를 쓴다. port는 보지 않는다 |
+| salt | 날마다 새로 만드는 무작위 32바이트. Go 메모리에만 두고, 날이 바뀌면 그날 hash 목록과 함께 버린다 |
+| 남기지 않는 것 | 접속 주소, User-Agent, hash는 DB, 파일, 서버 기록 어디에도 남기지 않는다. DB에는 날짜별 숫자만 있다 |
+| 받아들인 한계 | Go를 다시 켜면 그날 hash 목록이 사라져 같은 사람을 한 번 더 셀 수 있다. 같은 주소(같은 회사, 같은 VPN)에 User-Agent까지 같으면 1명으로 센다 |
+| 하루 상한 | 하루에 기억하는 사람은 200,000명까지다(메모리 보호). 넘으면 그날은 더 세지 않고, 서버 기록에 한 번 남긴다(주소 등은 넣지 않는다) |
+
+## 6.2 방문 하나 세기
+
+```text
+POST /api/visits
+```
+
+- 인증 없음. 본문은 없다(보내도 읽지 않는다). `Content-Type`은 보지 않는다.
+- 응답 204(본문 없음), `Cache-Control: no-store`. 그날 이미 센 사람이어도, 접속 주소를 알 수 없어도(믿을 proxy가 읽을 수 없는 주소를 넘김), 하루 상한을 넘어도 세지 않고 똑같이 204다.
+
+## 6.3 오늘과 전체
+
+```text
+GET /api/visits/summary
+```
+
+- 인증 없음. 공개 화면 아래쪽 표시에 쓴다. 표시를 켜고 끄는 설정은 없다(항상 표시).
+- 응답 200, `Cache-Control: no-store`:
+
+```json
+{ "today": 12, "total": 3456 }
+```
+
+| 칸 | 뜻 |
+| --- | --- |
+| `today` | 오늘(Asia/Seoul) 방문자 수. 기록이 없으면 0 |
+| `total` | 전체 방문자 수 = 시작값(6.4 `base`) + 일별 방문자 수 합(오늘 포함) |
+
+## 6.4 관리자: 방문자 수 보기
+
+```text
+GET /api/admin/visits
+```
+
+허용 IP + 로그인(5.1). 응답 200:
+
+```json
+{
+  "today": 12,
+  "total": 3456,
+  "base": 3000,
+  "days": [
+    { "day": "2026-10-03", "count": 0 },
+    { "day": "2026-10-04", "count": 15 },
+    { "day": "2026-11-01", "count": 12 }
+  ]
+}
+```
+
+> 값은 예시다. `days`는 실제로 30개다.
+
+| 칸 | 뜻 |
+| --- | --- |
+| `today`, `total` | 6.3과 같다 |
+| `base` | 전체 방문자 수의 시작값 |
+| `days` | 오늘을 포함한 최근 30일의 일별 방문자 수. 오래된 날부터, 기록이 없는 날은 `count` 0으로 채워 늘 30개다. `day`는 `YYYY-MM-DD`(Asia/Seoul) |
+
+## 6.5 관리자: 시작값 바꾸기
+
+```text
+PUT /api/admin/visits/base     {"base": 3000}
+```
+
+- 예전 숫자를 이어 쓸 때 쓴다. `base`는 0 이상 9007199254740991 이하 정수(화면이 정확히 읽을 수 있는 가장 큰 정수)다. 빠졌거나, `null`, 음수, 소수, 문자열, 범위 밖이면 400 `{"error":"invalid input","fields":{"base":"must be an integer from 0 to 9007199254740991"}}`이고 바꾸지 않는다.
+- 성공 200: 바꾼 뒤의 방문자 수(6.4 응답과 같다).
+- 서버 기록: `admin audit: account "…": visit_total_base <이전> -> <새 값>`
+
+## 6.6 관리자: 초기화
+
+```text
+POST /api/admin/visits/reset
+```
+
+- 시험 기간 숫자를 지울 때 쓴다. 일별 기록을 모두 지우고 시작값을 0으로 한다(한 transaction). 되돌릴 수 없다.
+- `Content-Type: application/json`이어야 한다(5.1). 본문은 읽지 않는다(`{}`를 보낸다).
+- 성공 200: 초기화한 뒤의 방문자 수(6.4 응답과 같다. 모두 0).
+- Go 메모리의 그날 hash 목록은 그대로다. 오늘 이미 센 사람은 초기화한 뒤에도 오늘은 다시 세지 않는다.
+- 서버 기록: `admin audit: account "…": reset visits: deleted <날 수> days (<방문자 수 합> visits), visit_total_base <이전> -> 0`
+
+## 6.7 오류
+
+| 상태 | 언제 | 응답 |
+| --- | --- | --- |
+| 400 | 관리자 시작값 입력 오류(6.5), 본문이 JSON이 아님, 모르는 칸 | 5.2와 같다 |
+| 401, 403, 415 | 관리자 API(6.4~6.6). 5.2와 같다 | 5.2와 같다 |
+| 404 | 없는 주소(예: `/api/visits/none`) | `{"error":"not found"}` |
+| 405 | `/api/visits`에 `POST`가 아닌 method(`Allow: POST`), `/api/visits/summary`에 `GET`, `HEAD`가 아닌 method(`Allow: GET, HEAD`), 관리자 API는 5.2와 같다 | `{"error":"method not allowed"}` |
+| 500 | DB 오류. 자세한 내용은 서버 기록에만 남는다(주소, User-Agent는 넣지 않는다). `POST /api/visits`가 500이면 그 사람은 세지 않은 것으로 보고, 다음 요청에서 다시 센다 | `{"error":"internal error"}` |
+
+## 6.8 확인 명령
+
+서버를 띄운 뒤(`b-go-end/README.md`):
+
+```sh
+V=http://127.0.0.1:8080/api/visits
+curl -s -i -X POST $V                           # 204
+curl -s -i -X POST $V                           # 204(같은 사람이라 세지 않는다)
+curl -s -X POST -A 'other-browser' $V           # 다른 User-Agent는 다른 사람이다
+curl -s $V/summary                              # {"today":2,"total":…}
+curl -s -i $V                                   # 405
+```
+
+관리자(5.10처럼 로그인한 뒤, cookie 파일 `$J`):
+
+```sh
+A=http://127.0.0.1:8080/api/admin
+H='Content-Type: application/json'
+curl -s -b $J $A/visits
+curl -s -b $J -X PUT -H "$H" -d '{"base":3000}' $A/visits/base
+curl -s -b $J -X PUT -H "$H" -d '{"base":-1}' $A/visits/base     # 400
+curl -s -b $J -X POST -H "$H" -d '{}' $A/visits/reset             # 숫자가 모두 지워진다. 시험할 때만
+```
