@@ -186,3 +186,19 @@ export function addBody(f: AddForm): AddRequest {
 export function collectTimeError(text: string): string | null {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(text) ? null : 'HH:MM(00:00~23:59)으로 넣어 주세요'
 }
+
+/** 시작값의 최댓값(40.api 6.5). 화면(JavaScript)이 정확히 읽을 수 있는 가장 큰 정수다. */
+export const maxVisitBase = Number.MAX_SAFE_INTEGER
+
+/** 방문자 수 시작값 입력. 0 이상 정수(쉼표 없이)면 그 수, 아니면 오류 글이다(40.api 6.5). */
+export function parseVisitBase(text: string): { value: number } | { error: string } {
+  const t = text.trim()
+  const n = Number(t)
+  if (!/^\d+$/.test(t)) {
+    return { error: '0 이상의 정수로 넣어 주세요(쉼표 없이)' }
+  }
+  if (!Number.isSafeInteger(n) || n > maxVisitBase) {
+    return { error: '너무 큰 수입니다' }
+  }
+  return { value: n }
+}

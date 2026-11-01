@@ -10,6 +10,7 @@ const AdminLayout = lazy(() => import('./admin/AdminLayout.tsx').then((m) => ({ 
 const LoginPage = lazy(() => import('./admin/LoginPage.tsx').then((m) => ({ default: m.LoginPage })))
 const DashboardPage = lazy(() => import('./admin/DashboardPage.tsx').then((m) => ({ default: m.DashboardPage })))
 const ApiPage = lazy(() => import('./admin/ApiPage.tsx').then((m) => ({ default: m.ApiPage })))
+const VisitsPage = lazy(() => import('./admin/VisitsPage.tsx').then((m) => ({ default: m.VisitsPage })))
 
 // 사이트 구조(50.web 7장). 사용자 화면에는 관리자 링크를 두지 않는다.
 export function App() {
@@ -22,6 +23,7 @@ export function App() {
           <Route element={<AdminLayout />}>
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="api" element={<ApiPage />} />
+            <Route path="visits" element={<VisitsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
         </Route>
