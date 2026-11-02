@@ -14,6 +14,8 @@ export interface Session {
 export interface AdminIndicator {
   id: string
   name: string
+  /** 구분 code(5.11). 이름은 GET /api/admin/categories에서 찾는다. */
+  category: string
   source: SourceCode
   stat_code: string
   item_code: string | null
@@ -39,6 +41,7 @@ export interface AdminIndicatorList {
 /** 지표 수정 요청(5.6). 바꿀 수 있는 칸만, 모두 보낸다. */
 export interface EditRequest {
   name: string
+  category: string
   cycle: Cycle
   unit: string | null
   chart_period: string
@@ -62,6 +65,17 @@ export interface AddRequest extends EditRequest {
 /** 노출과 순서 저장 요청(5.7). */
 export interface DisplayOrderRequest {
   indicators: { id: string; visible: boolean; order: number }[]
+}
+
+/** 지표 구분 하나(5.11). order가 작은 것이 앞이다. */
+export interface AdminCategory {
+  code: string
+  name: string
+  order: number
+}
+
+export interface CategoryList {
+  categories: AdminCategory[]
 }
 
 export interface CollectTime {
@@ -103,6 +117,7 @@ export const logoutPath = `${base}/logout`
 export const sessionPath = `${base}/session`
 export const indicatorsPath = `${base}/indicators`
 export const displayOrderPath = `${base}/display-order`
+export const categoriesPath = `${base}/categories`
 export const collectTimePath = `${base}/collect-time`
 export const sourcesPath = `${base}/sources`
 export const visitsPath = `${base}/visits`

@@ -2,7 +2,7 @@
 // 값과 코드는 모두 지어낸 것이다. 실제 수집값이나 확인한 지표 코드가 아니다.
 // 관리자 API(mock/admin.ts)가 이 목록을 바꾸면 사용자 화면에도 보인다(dev 서버를 다시 켜면 처음으로 돌아간다).
 import type { Card, Cycle, Detail, Point } from '../src/api.ts'
-import type { AdminIndicator, SourceCode } from '../src/admin/api.ts'
+import type { AdminCategory, AdminIndicator, SourceCode } from '../src/admin/api.ts'
 
 interface Series {
   last: string
@@ -18,6 +18,19 @@ export interface Fake extends AdminIndicator {
   last_collected_at: string | null
 }
 
+/** 지표 구분(40.api 5.11). 실제 목록은 DB migration(0004)이 정한다. */
+export const categories: AdminCategory[] = [
+  { code: 'growth', name: '성장·경기', order: 1 },
+  { code: 'price', name: '물가', order: 2 },
+  { code: 'labor', name: '고용·소득', order: 3 },
+  { code: 'money', name: '금리·통화', order: 4 },
+  { code: 'credit', name: '부채·금융안정', order: 5 },
+  { code: 'external', name: '대외경제', order: 6 },
+  { code: 'housing', name: '주택', order: 7 },
+  { code: 'population', name: '인구', order: 8 },
+  { code: 'market', name: '금융시장', order: 9 },
+]
+
 const notice = '이 정보는 신뢰할 수 없습니다. 투자 판단에 사용하지 마십시오.'
 const collected = '2026-10-25T06:00:03+09:00'
 
@@ -25,8 +38,8 @@ const collected = '2026-10-25T06:00:03+09:00'
 const wave = (base: number, amp: number, step = 0.3) => (i: number) =>
   Math.round((base + amp * Math.sin(i * step)) * 100) / 100
 
-type Init = Pick<Fake, 'id' | 'name' | 'cycle' | 'stat_code'> &
-  Partial<Omit<Fake, 'id' | 'name' | 'cycle' | 'stat_code' | 'source'>> & { source: SourceCode }
+type Init = Pick<Fake, 'id' | 'name' | 'category' | 'cycle' | 'stat_code'> &
+  Partial<Omit<Fake, 'id' | 'name' | 'category' | 'cycle' | 'stat_code' | 'source'>> & { source: SourceCode }
 
 function fake(x: Init): Fake {
   return {
@@ -50,37 +63,37 @@ function fake(x: Init): Fake {
 
 const initial: Fake[] = [
   // 40.api 5.4 응답 예시
-  fake({ id: 'ecos-base-rate', name: '한국은행 기준금리', source: 'ecos', stat_code: '722Y001', item_code: '0101000',
+  fake({ id: 'ecos-base-rate', name: '한국은행 기준금리', category: 'money', source: 'ecos', stat_code: '722Y001', item_code: '0101000',
     cycle: 'M', source_unit: '연%', order: 1, chart_period: '10 years', decimals: 2,
     series: { last: '2026-09-01', count: 120, value: (i) => [1.25, 1.5, 0.5, 1.75, 3.5, 2.5][Math.floor(i / 20)] },
     related: ['kosis-employment-rate', 'data-go-kr-kodex-200'] }),
-  fake({ id: 'kosis-employment-rate', name: '고용률(15세 이상)', source: 'kosis', stat_code: 'DT_1DA7001S', classes: ['fake-class'],
+  fake({ id: 'kosis-employment-rate', name: '고용률(15세 이상)', category: 'labor', source: 'kosis', stat_code: 'DT_1DA7001S', classes: ['fake-class'],
     cycle: 'M', unit: '%', order: 2, chart_period: '10 years', decimals: 1,
     series: { last: '2026-09-01', count: 120, value: wave(61.5, 1.2) }, related: ['ecos-base-rate'] }),
-  fake({ id: 'kosis-total-population', name: '총인구', source: 'kosis', stat_code: 'DT_1IN1502', cycle: 'A', source_unit: '명',
+  fake({ id: 'kosis-total-population', name: '총인구', category: 'population', source: 'kosis', stat_code: 'DT_1IN1502', cycle: 'A', source_unit: '명',
     order: 3, chart_period: '20 years', decimals: 0,
     series: { last: '2025-01-01', count: 20, value: (i) => 49_000_000 + i * 150_000 } }),
-  fake({ id: 'kosis-births', name: '출생아 수', source: 'kosis', stat_code: 'INH_1B8000F_01', cycle: 'A', order: 4,
+  fake({ id: 'kosis-births', name: '출생아 수', category: 'population', source: 'kosis', stat_code: 'INH_1B8000F_01', cycle: 'A', order: 4,
     chart_period: '20 years', series: { last: '2025-01-01', count: 20, value: (i) => 450_000 - i * 10_000 },
     related: ['kosis-total-population'] }),
-  fake({ id: 'fake-quarterly', name: '분기 지표(가짜)', source: 'ecos', stat_code: 'FAKE01', cycle: 'Q', unit: '조원', order: 5,
+  fake({ id: 'fake-quarterly', name: '분기 지표(가짜)', category: 'growth', source: 'ecos', stat_code: 'FAKE01', cycle: 'Q', unit: '조원', order: 5,
     chart_period: '10 years', series: { last: '2026-04-01', count: 40, value: wave(500, 40, 0.5) } }),
-  fake({ id: 'data-go-kr-kodex-200', name: 'KODEX 200', source: 'data-go-kr', stat_code: '069500', cycle: 'D', order: 6,
+  fake({ id: 'data-go-kr-kodex-200', name: 'KODEX 200', category: 'market', source: 'data-go-kr', stat_code: '069500', cycle: 'D', order: 6,
     chart_period: '1 years', series: { last: '2026-10-29', count: 250, value: wave(90000, 6000, 0.05) },
     related: ['data-go-kr-kodex-leverage', 'data-go-kr-kodex-inverse'] }),
-  fake({ id: 'data-go-kr-kodex-leverage', name: 'KODEX 레버리지', source: 'data-go-kr', stat_code: '122630', cycle: 'D',
+  fake({ id: 'data-go-kr-kodex-leverage', name: 'KODEX 레버리지', category: 'market', source: 'data-go-kr', stat_code: '122630', cycle: 'D',
     notice, order: 7, chart_period: '1 years', series: { last: '2026-10-29', count: 250, value: wave(75000, 9000, 0.05) },
     related: ['data-go-kr-kodex-200'] }),
-  fake({ id: 'data-go-kr-kodex-inverse', name: 'KODEX 인버스', source: 'data-go-kr', stat_code: '114800', cycle: 'D',
+  fake({ id: 'data-go-kr-kodex-inverse', name: 'KODEX 인버스', category: 'market', source: 'data-go-kr', stat_code: '114800', cycle: 'D',
     notice, order: 8, chart_period: '1 years', series: { last: '2026-10-29', count: 250, value: wave(1200, 80, 0.05) },
     related: ['data-go-kr-kodex-200'] }),
   // 아직 수집하지 않은 지표: 값, 단위, 마지막 수집이 없다.
-  fake({ id: 'fake-empty', name: '아직 수집 전(가짜)', source: 'ecos', stat_code: 'FAKE02', cycle: 'M', order: 9,
+  fake({ id: 'fake-empty', name: '아직 수집 전(가짜)', category: 'price', source: 'ecos', stat_code: 'FAKE02', cycle: 'M', order: 9,
     chart_period: '10 years', last_collected_at: null }),
   // 숨긴 지표, 화면 설정이 없는 지표(관리자 화면에서만 보인다).
-  fake({ id: 'fake-hidden', name: '숨긴 지표(가짜)', source: 'ecos', stat_code: 'FAKE03', cycle: 'M', visible: false, order: 10,
+  fake({ id: 'fake-hidden', name: '숨긴 지표(가짜)', category: 'credit', source: 'ecos', stat_code: 'FAKE03', cycle: 'M', visible: false, order: 10,
     chart_period: '5 years', series: { last: '2026-09-01', count: 60, value: wave(100, 5) } }),
-  fake({ id: 'fake-no-display', name: '화면 설정 없음(가짜)', source: 'ecos', stat_code: 'FAKE04', cycle: 'M', visible: false,
+  fake({ id: 'fake-no-display', name: '화면 설정 없음(가짜)', category: 'housing', source: 'ecos', stat_code: 'FAKE04', cycle: 'M', visible: false,
     last_collected_at: null }),
 ]
 
@@ -88,6 +101,10 @@ const initial: Fake[] = [
 export const fakes: Fake[] = initial
 
 const unitOf = (f: Fake) => f.unit || f.source_unit || null
+const categoryOf = (code: string) => {
+  const c = categories.find((x) => x.code === code)
+  return { code, name: c?.name ?? code, order: c?.order ?? Infinity }
+}
 const sourceNames: Record<SourceCode, string> = { ecos: 'ECOS', kosis: 'KOSIS', 'data-go-kr': '공공데이터포털' }
 
 /** last에서 주기만큼 거슬러 간 기간 시작일(YYYY-MM-DD). */
@@ -117,13 +134,16 @@ export function sorted(): Fake[] {
   )
 }
 
+/** 메인 화면 순서(40.api 2장): 구분 순서, 그다음 order, id. */
 export function cards(): { indicators: Card[] } {
   return {
     indicators: sorted()
       .filter((f) => f.visible && f.order !== null)
+      .sort((a, b) => categoryOf(a.category).order - categoryOf(b.category).order)
       .map((f) => ({
         id: f.id,
         name: f.name,
+        category: { code: f.category, name: categoryOf(f.category).name },
         cycle: f.cycle,
         unit: unitOf(f),
         decimals: f.decimals,
@@ -139,6 +159,7 @@ export function detail(id: string): Detail | undefined {
   return {
     id: f.id,
     name: f.name,
+    category: { code: f.category, name: categoryOf(f.category).name },
     cycle: f.cycle,
     unit: unitOf(f),
     decimals: f.decimals,
