@@ -47,13 +47,19 @@ go run ./cmd/server -indicator kosis-total-population -start 2015 -end 2025
 | `DT_1DA7002S-T90-75-M-202401-202609.json` | `kosis-youth-employment-rate` 청년 고용률(15~29세) | 33 | `apiKey=***&endPrdDe=202609&format=json&itmId=T90&jsonVD=Y&method=getList&objL1=75&orgId=101&prdSe=M&startPrdDe=202401&tblId=DT_1DA7002S` |
 | `DT_1DA7002S-T10-63-M-202401-202609.json` | `kosis-working-age-population` 생산가능인구(15~64세) | 33 | `apiKey=***&endPrdDe=202609&format=json&itmId=T10&jsonVD=Y&method=getList&objL1=63&orgId=101&prdSe=M&startPrdDe=202401&tblId=DT_1DA7002S` |
 | `DT_1BPA002-T10-1-33-Y-2015-2025.json` | `kosis-elderly-ratio` 65세 이상 인구 비율(장래인구추계) | 11 | `apiKey=***&endPrdDe=2025&format=json&itmId=T10&jsonVD=Y&method=getList&objL1=1&objL2=33&orgId=101&prdSe=Y&startPrdDe=2015&tblId=DT_1BPA002` |
+| `DT_118N_MON051-13103110311MD_12-190326INDUSTRY_10S0-size01-M-202401-202609.json` | `kosis-wage-nominal` 명목임금(월, 전체임금총액) | 24 | `apiKey=***&endPrdDe=202609&format=json&itmId=13103110311MD_12&jsonVD=Y&method=getList&objL1=190326INDUSTRY_10S0&objL2=size01&orgId=118&prdSe=M&startPrdDe=202401&tblId=DT_118N_MON051` |
+| `DT_134001_001-T002-DATA-M-202401-202610.json` | `kosis-exports` 수출액 | 33 | `apiKey=***&endPrdDe=202610&format=json&itmId=T002&jsonVD=Y&method=getList&objL1=DATA&orgId=134&prdSe=M&startPrdDe=202401&tblId=DT_134001_001` |
+| `DT_134001_001-T004-DATA-M-202401-202610.json` | `kosis-imports` 수입액 | 33 | `apiKey=***&endPrdDe=202610&format=json&itmId=T004&jsonVD=Y&method=getList&objL1=DATA&orgId=134&prdSe=M&startPrdDe=202401&tblId=DT_134001_001` |
+| `DT_134001_001-T005-DATA-M-202401-202610.json` | `kosis-trade-balance` 무역수지 | 33 | `apiKey=***&endPrdDe=202610&format=json&itmId=T005&jsonVD=Y&method=getList&objL1=DATA&orgId=134&prdSe=M&startPrdDe=202401&tblId=DT_134001_001` |
+| `DT_MLTM_2080-13103792722T1-13102792722A.0001-13102792722B.0001-13102792722C.0001-M-202401-202609.json` | `kosis-unsold-housing` 미분양 주택 | 32 | `apiKey=***&endPrdDe=202609&format=json&itmId=13103792722T1&jsonVD=Y&method=getList&objL1=13102792722A.0001&objL2=13102792722B.0001&objL3=13102792722C.0001&orgId=116&prdSe=M&startPrdDe=202401&tblId=DT_MLTM_2080` |
 
 - `DT_1F70011`(설비투자지수)은 분류 B가 둘째 자리라 `objL1=ALL&objL2=C`로 불러야 한다. 응답 행에 `C1`이 없어 지금 수집기(Rust)가 읽지 못한다.
+- 고용노동부(`DT_118N_…`, orgId 118), 관세청(`DT_134001_001`, orgId 134), 국토교통부(`DT_MLTM_2080`, orgId 116) 표는 `-org`로 받았다. 파일 이름은 수집기 규칙대로 기관 코드를 붙이지 않았다(조사 샘플은 `기관코드-`가 붙어 있다).
 - `DT_1J22042`(소비자물가 등락률)와 `DT_1BPA002`(주요 인구지표)는 `UNIT_NM`이 없다.
 
 받은 명령(조사 샘플은 `samples/repository/d024/`):
 
 ```sh
 cd b-go-end
-go run ./cmd/sample -out ../samples/repository/d024 -list ../samples/repository/d024/round2.yaml   # round3.yaml, round4.yaml도 같은 방법
+go run ./cmd/sample -out ../samples/repository/d024 -list ../samples/repository/d024/round2.yaml   # round3~7.yaml도 같은 방법
 ```
