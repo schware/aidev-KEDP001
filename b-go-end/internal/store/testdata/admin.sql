@@ -1,15 +1,15 @@
--- admin_test.go의 시험 데이터. 0001, 0002 migration을 적용한 시험 DB(kedp_admin_check)에 superuser로 넣는다.
+-- admin_test.go의 시험 데이터. 0001~0004 migration을 적용한 시험 DB(kedp_admin_check)에 superuser로 넣는다.
 -- 시험이 값을 바꾸므로 시험마다 DB를 새로 만든다(b-go-end/README.md). kedp DB에는 넣지 않는다.
 
 \set ON_ERROR_STOP on
 BEGIN;
 
-INSERT INTO indicator (id, name, source_code, stat_code, item_code, org_id, classes, value_field, cycle, unit, source_unit) VALUES
-    ('a-rate', '금리', 'ecos', '722Y001', '0101000', NULL, '{}', NULL, 'M', '%', '연%'),
-    ('a-pop', '인구', 'kosis', 'DT_1', 'T1', '101', '{00}', NULL, 'A', NULL, '명'),
-    ('a-hidden', '숨김', 'data-go-kr', '069500', NULL, NULL, '{}', 'clpr', 'D', NULL, NULL),
+INSERT INTO indicator (id, name, source_code, stat_code, item_code, org_id, classes, value_field, cycle, unit, source_unit, category_code) VALUES
+    ('a-rate', '금리', 'ecos', '722Y001', '0101000', NULL, '{}', NULL, 'M', '%', '연%', 'money'),
+    ('a-pop', '인구', 'kosis', 'DT_1', 'T1', '101', '{00}', NULL, 'A', NULL, '명', 'population'),
+    ('a-hidden', '숨김', 'data-go-kr', '069500', NULL, NULL, '{}', 'clpr', 'D', NULL, NULL, 'market'),
     -- 화면 설정이 없다
-    ('a-bare', '설정 없음', 'ecos', 'X', 'Y', NULL, '{}', NULL, 'Q', NULL, NULL);
+    ('a-bare', '설정 없음', 'ecos', 'X', 'Y', NULL, '{}', NULL, 'Q', NULL, NULL, 'growth');
 
 -- a-rate의 number_format에는 decimals 말고 다른 칸도 있다(고쳐도 남아야 한다).
 INSERT INTO indicator_display (indicator_id, is_visible, sort_order, chart_period, number_format, notice) VALUES

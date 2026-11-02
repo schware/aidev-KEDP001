@@ -4,6 +4,7 @@
 - 근거: KEDP001-D016(net/http), KEDP001-D017(MVP 범위), KEDP001-D022 9·11(단위, 주기), `specification/50.web/README.md` 2·3장, Issue #36
 - 관리자 API(5장) 근거: KEDP001-D012, D018, D019, D022, `specification/50.web/README.md` 1장 관리자, 4~6장, Issue #40
 - 방문자 수 API(6장) 근거: Issue #48
+- 지표 구분(`category`, 2·3장, 5.4~5.6, 5.11) 근거: KEDP001-D024, Issue #52
 - 구현: `b-go-end/internal/api`, `b-go-end/internal/store/read.go`, 관리자 API는 `b-go-end/internal/admin`, `b-go-end/internal/store/admin.go`
 
 화면(TypeScript)은 이 문서만 보고 API를 쓴다. ECOS·KOSIS·DB를 직접 부르지 않는다.
@@ -69,7 +70,7 @@ GET /api/indicators
 ```
 
 - 노출(`indicator_display.is_visible`)된 지표만 돌려준다. 화면 설정이 없는 지표도 나오지 않는다.
-- 순서는 `sort_order`, 같으면 `id` 순서다. 화면은 받은 순서대로 카드를 놓는다.
+- 순서는 구분 순서(`category.sort_order`)가 먼저이고, 같은 구분 안에서는 `sort_order`, 같으면 `id` 순서다. 화면은 받은 순서대로 구분을 묶고 카드를 놓는다.
 - `latest`는 마지막 관측값이다. 아직 수집한 값이 없으면 `null`이다.
 
 응답 200:
@@ -80,6 +81,7 @@ GET /api/indicators
     {
       "id": "ecos-base-rate",
       "name": "한국은행 기준금리",
+      "category": { "code": "money", "name": "금리·통화" },
       "cycle": "M",
       "unit": "연%",
       "decimals": 2,
@@ -88,6 +90,7 @@ GET /api/indicators
     {
       "id": "data-go-kr-kodex-200",
       "name": "KODEX 200",
+      "category": { "code": "market", "name": "금융시장" },
       "cycle": "D",
       "unit": null,
       "decimals": null,
@@ -103,6 +106,7 @@ GET /api/indicators
 | --- | --- | --- |
 | `id` | 문자열 | 지표 id. 상세 화면 주소 `/indicator/{id}`에 쓴다 |
 | `name` | 문자열 | 지표 이름 |
+| `category` | 객체 | 지표 구분. `code`(예: `money`)와 화면 이름 `name`(예: `금리·통화`). 목록은 5.11 |
 | `cycle` | 문자열 | 주기 |
 | `unit` | 문자열 또는 `null` | 단위(1.2) |
 | `decimals` | 숫자 또는 `null` | 소수 자릿수(1.1) |
@@ -125,6 +129,7 @@ GET /api/indicators/{id}
 {
   "id": "ecos-base-rate",
   "name": "한국은행 기준금리",
+  "category": { "code": "money", "name": "금리·통화" },
   "cycle": "M",
   "unit": "연%",
   "decimals": 2,
@@ -152,7 +157,7 @@ GET /api/indicators/{id}
 
 | 칸 | 형식 | 뜻 |
 | --- | --- | --- |
-| `id`, `name`, `cycle`, `unit`, `decimals` | | 2장과 같다 |
+| `id`, `name`, `category`, `cycle`, `unit`, `decimals` | | 2장과 같다 |
 | `notice` | 문자열 또는 `null` | 상세 화면 맨 위 안내 문구(`indicator_display.notice`). 있으면 눈에 띄게 보여준다(예: KODEX 레버리지·인버스) |
 | `source` | 객체 | 제공처 `code`(`ecos`, `kosis`, `data-go-kr`)와 화면 이름 `name`(`ECOS`, `KOSIS`, `공공데이터포털`) |
 | `stat_code` | 문자열 | 통계 코드(ECOS 통계 코드, KOSIS 표 id, 공공데이터포털 종목 코드) |
@@ -254,6 +259,7 @@ GET /api/admin/indicators
     {
       "id": "ecos-base-rate",
       "name": "한국은행 기준금리",
+      "category": "money",
       "source": "ecos",
       "stat_code": "722Y001",
       "item_code": "0101000",
@@ -280,6 +286,7 @@ GET /api/admin/indicators
 | --- | --- | --- |
 | `id` | 문자열 | 지표 id. 화면 주소 `/indicator/{id}`에도 쓴다 |
 | `name` | 문자열 | 지표 이름 |
+| `category` | 문자열 | 구분 code(5.11). 이름은 5.11 목록에서 찾는다 |
 | `source` | 문자열 | 제공처 `ecos`, `kosis`, `data-go-kr` |
 | `stat_code` | 문자열 | ECOS 통계 코드, KOSIS 표 id(`tblId`), 공공데이터포털 종목 코드 |
 | `item_code` | 문자열 또는 `null` | ECOS 항목 코드, KOSIS `itmId`. 공공데이터포털은 `null` |
@@ -311,6 +318,7 @@ POST /api/admin/indicators
 {
   "id": "kosis-kospi",
   "name": "KOSPI",
+  "category": "market",
   "source": "kosis",
   "stat_code": "DT_XXXX",
   "item_code": "T1",
@@ -333,6 +341,7 @@ POST /api/admin/indicators
 | --- | --- | --- |
 | `id` | 예 | 영문 소문자와 숫자를 `-`로 이은 글(예: `kosis-kospi`). 같은 id가 있으면 409 |
 | `name` | 예 | 빈 글자가 아니다. 앞뒤 공백은 뺀다 |
+| `category` | 예 | 구분 code(5.11). 앞뒤 공백은 뺀다. 빠지거나 빈 글자면 `required`, 없는 code면 400 `fields.category` = `category "…" does not exist` |
 | `source` | 예 | `ecos`, `kosis`, `data-go-kr` |
 | `stat_code` | 예 | 빈 글자가 아니다 |
 | `item_code` | 제공처마다 | `ecos`, `kosis`는 꼭 넣는다. `data-go-kr`은 비운다 |
@@ -347,7 +356,7 @@ POST /api/admin/indicators
 | `notice` | 아니요 | 빈 글자나 `null`이면 없음 |
 | `related` | 아니요 | 있는 지표의 id 배열. 자기 자신, 같은 id 두 번은 안 된다. 빠지면 `[]` |
 
-- 규칙은 DB 제약(`b-sql-db/migrations/0001_schema.up.sql`)과 같다. DB에 넣기 전에 모두 검사하고, 틀린 칸을 모두 `fields`에 담아 400으로 돌려준다.
+- 규칙은 DB 제약(`b-sql-db/migrations/0001_schema.up.sql`, `0004_category.up.sql`)과 같다. DB에 넣기 전에 모두 검사하고, 틀린 칸을 모두 `fields`에 담아 400으로 돌려준다. 구분 code가 목록에 있는지와 관련 지표가 있는지만 DB에 넣을 때 확인한다(그 칸 하나만 `fields`에 담긴다).
 - 제공처에 그 코드가 있는지는 확인하지 않는다. 다음 수집 결과가 API 관리(5.9)에 보인다.
 - 순서(`order`)는 맨 뒤다. 지표, 화면 설정, 관련 지표는 한 transaction으로 넣는다.
 - 성공 201: 추가한 지표(5.4의 지표 하나).
@@ -364,6 +373,7 @@ PUT /api/admin/indicators/{id}
 ```json
 {
   "name": "한국은행 기준금리",
+  "category": "money",
   "cycle": "M",
   "unit": null,
   "chart_period": "10 years",
@@ -375,7 +385,7 @@ PUT /api/admin/indicators/{id}
 
 | 칸 | 꼭 | 규칙 |
 | --- | --- | --- |
-| `name`, `cycle`, `chart_period` | 예 | 5.5와 같다 |
+| `name`, `category`, `cycle`, `chart_period` | 예 | 5.5와 같다 |
 | `unit`, `decimals`, `notice` | 아니요 | 5.5와 같다. 빠지거나 `null`이면 지운다 |
 | `related` | 예 | 5.5와 같다. 관련 지표를 모두 지우려면 `[]`. 보낸 목록으로 바꾼다 |
 
@@ -475,6 +485,7 @@ unset ADMIN_PASSWORD
 
 curl -s -b $J $A/session
 curl -s -b $J $A/indicators
+curl -s -b $J $A/categories
 curl -s -b $J $A/collect-time
 curl -s -b $J $A/sources
 
@@ -487,6 +498,43 @@ rm -f $J
 ```
 
 - 비밀번호에 `"`나 `\`가 있으면 위 `printf`로는 JSON이 깨진다. 그때는 `jq -n --arg a "$ADMIN_ACCOUNT" --arg p "$ADMIN_PASSWORD" '{account:$a,password:$p}'`로 만든다.
+
+## 5.11 지표 구분 (KEDP001-D024, Issue #52)
+
+```text
+GET /api/admin/categories
+```
+
+지표 추가·수정 화면에서 구분을 고를 때 쓴다. 순서는 `order`(작은 것이 앞)다.
+
+응답 200:
+
+```json
+{
+  "categories": [
+    { "code": "growth", "name": "성장·경기", "order": 1 },
+    { "code": "price", "name": "물가", "order": 2 }
+  ]
+}
+```
+
+> 줄였다. 전체 목록은 아래 표다.
+
+| `code` | `name` | `order` |
+| --- | --- | --- |
+| `growth` | 성장·경기 | 1 |
+| `price` | 물가 | 2 |
+| `labor` | 고용·소득 | 3 |
+| `money` | 금리·통화 | 4 |
+| `credit` | 부채·금융안정 | 5 |
+| `external` | 대외경제 | 6 |
+| `housing` | 주택 | 7 |
+| `population` | 인구 | 8 |
+| `market` | 금융시장 | 9 |
+
+- 구분 목록은 DB(`category`)에 있고 migration으로만 바꾼다. 관리자 API로 추가·수정·삭제하지 않는다.
+- 지표마다 구분이 꼭 하나 있다(`indicator.category_code`). 지표의 구분은 5.5, 5.6으로 정한다.
+- 노출과 순서 저장(5.7)은 바뀌지 않는다. 순서(`order`)는 구분과 상관없는 전체 순서이고, 공개 화면(2장)은 구분 순서로 먼저 묶은 뒤 이 순서를 쓴다.
 
 ---
 

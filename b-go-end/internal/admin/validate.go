@@ -87,6 +87,13 @@ func checkName(e fieldErrors, name *string) {
 	}
 }
 
+// checkCategory는 구분 code가 있는지만 본다. 구분 목록에 있는지는 DB가 본다(없으면 400 category).
+func checkCategory(e fieldErrors, category *string) {
+	if text(category) == "" {
+		e["category"] = "required"
+	}
+}
+
 func checkCycle(e fieldErrors, cycle *string) {
 	switch {
 	case cycle == nil:
@@ -100,6 +107,7 @@ func checkCycle(e fieldErrors, cycle *string) {
 type addRequest struct {
 	ID         *string  `json:"id"`
 	Name       *string  `json:"name"`
+	Category   *string  `json:"category"`
 	Source     *string  `json:"source"`
 	StatCode   *string  `json:"stat_code"`
 	ItemCode   *string  `json:"item_code"`
@@ -122,6 +130,7 @@ func (q addRequest) validate() (store.NewIndicator, fieldErrors) {
 		e["id"] = "must be lowercase letters and digits joined by '-' (e.g. kosis-kospi)"
 	}
 	checkName(e, q.Name)
+	checkCategory(e, q.Category)
 	src := text(q.Source)
 	switch {
 	case q.Source == nil:
@@ -167,7 +176,7 @@ func (q addRequest) validate() (store.NewIndicator, fieldErrors) {
 		return store.NewIndicator{}, e
 	}
 	return store.NewIndicator{
-		ID: id, Name: text(q.Name), Source: src, StatCode: text(q.StatCode), Cycle: *q.Cycle,
+		ID: id, Name: text(q.Name), Category: text(q.Category), Source: src, StatCode: text(q.StatCode), Cycle: *q.Cycle,
 		OrgID: orgID, ItemCode: itemCode, ValueField: valueField, Unit: text(q.Unit),
 		Classes: classes, Visible: q.Visible != nil && *q.Visible,
 		ChartPeriod: *q.ChartPeriod, Decimals: q.Decimals, Notice: text(q.Notice), Related: nonNil(q.Related),
@@ -177,15 +186,17 @@ func (q addRequest) validate() (store.NewIndicator, fieldErrors) {
 // editRequest는 PUT /api/admin/indicators/{id}의 본문이다. 바꿀 수 있는 칸만 받는다.
 // 빠진 칸(unit, decimals, notice)은 null로 본다. related는 꼭 보낸다(관련 지표를 모두 지우려면 []).
 type editRequest struct {
-	Name  *string `json:"name"`
-	Cycle *string `json:"cycle"`
-	Unit  *string `json:"unit"`
+	Name     *string `json:"name"`
+	Category *string `json:"category"`
+	Cycle    *string `json:"cycle"`
+	Unit     *string `json:"unit"`
 	display
 }
 
 func (q editRequest) validate(id string) (store.Edit, fieldErrors) {
 	e := fieldErrors{}
 	checkName(e, q.Name)
+	checkCategory(e, q.Category)
 	checkCycle(e, q.Cycle)
 	if q.Related == nil {
 		e["related"] = "required (use [] for none)"
@@ -195,7 +206,7 @@ func (q editRequest) validate(id string) (store.Edit, fieldErrors) {
 		return store.Edit{}, e
 	}
 	return store.Edit{
-		Name: text(q.Name), Cycle: *q.Cycle, Unit: text(q.Unit),
+		Name: text(q.Name), Category: text(q.Category), Cycle: *q.Cycle, Unit: text(q.Unit),
 		ChartPeriod: *q.ChartPeriod, Decimals: q.Decimals, Notice: text(q.Notice), Related: q.Related,
 	}, nil
 }
@@ -230,9 +241,9 @@ func (q orderRequest) validate() ([]store.OrderItem, fieldErrors) {
 
 // describe는 서버 기록에 남길 지표 값이다.
 func describe(a store.AdminIndicator) string {
-	return fmt.Sprintf("(name %q, source %s, stat_code %s, item_code %s, classes %v, org_id %s, value_field %s, "+
+	return fmt.Sprintf("(name %q, category %s, source %s, stat_code %s, item_code %s, classes %v, org_id %s, value_field %s, "+
 		"cycle %s, unit %s, visible %t, chart_period %s, decimals %s, notice %s, related %v)",
-		a.Name, a.Source, a.StatCode, str(a.ItemCode), a.Classes, str(a.OrgID), str(a.ValueField),
+		a.Name, a.Category, a.Source, a.StatCode, str(a.ItemCode), a.Classes, str(a.OrgID), str(a.ValueField),
 		a.Cycle, str(a.Unit), a.Visible, str(a.ChartPeriod), num(a.Decimals), str(a.Notice), a.Related)
 }
 
@@ -245,6 +256,7 @@ func changes(b, a store.AdminIndicator) string {
 		}
 	}
 	add("name", fmt.Sprintf("%q", b.Name), fmt.Sprintf("%q", a.Name))
+	add("category", b.Category, a.Category)
 	add("cycle", b.Cycle, a.Cycle)
 	add("unit", str(b.Unit), str(a.Unit))
 	add("chart_period", str(b.ChartPeriod), str(a.ChartPeriod))

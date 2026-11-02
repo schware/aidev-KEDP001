@@ -7,6 +7,7 @@
 //	POST /api/admin/indicators         지표 추가
 //	PUT  /api/admin/indicators/{id}    지표 수정
 //	PUT  /api/admin/display-order      노출과 순서 저장(전체 목록)
+//	GET  /api/admin/categories         지표 구분 목록(읽기만, migration으로만 바꾼다)
 //	GET  /api/admin/collect-time       수집 시각
 //	PUT  /api/admin/collect-time       수집 시각 바꾸기
 //	GET  /api/admin/sources            제공처별 상태
@@ -41,6 +42,7 @@ type Store interface {
 	AddIndicator(ctx context.Context, n store.NewIndicator) error
 	UpdateIndicator(ctx context.Context, id string, e store.Edit) error
 	SaveOrder(ctx context.Context, items []store.OrderItem) error
+	Categories(ctx context.Context) ([]store.Category, error)
 	CollectTime(ctx context.Context) (string, error)
 	SetCollectTime(ctx context.Context, v string) (string, error)
 	SourceRuns(ctx context.Context) ([]store.SourceRun, error)
@@ -88,6 +90,7 @@ func Handler(c Config) http.Handler {
 		http.MethodGet: s.auth(s.listIndicators), http.MethodPost: s.auth(s.addIndicator)}))
 	mux.HandleFunc("/api/admin/indicators/{id}", methods(map[string]http.HandlerFunc{http.MethodPut: s.auth(s.editIndicator)}))
 	mux.HandleFunc("/api/admin/display-order", methods(map[string]http.HandlerFunc{http.MethodPut: s.auth(s.saveOrder)}))
+	mux.HandleFunc("/api/admin/categories", methods(map[string]http.HandlerFunc{http.MethodGet: s.auth(s.categories)}))
 	mux.HandleFunc("/api/admin/collect-time", methods(map[string]http.HandlerFunc{
 		http.MethodGet: s.auth(s.getCollectTime), http.MethodPut: s.auth(s.setCollectTime)}))
 	mux.HandleFunc("/api/admin/sources", methods(map[string]http.HandlerFunc{http.MethodGet: s.auth(s.sources)}))
@@ -332,6 +335,7 @@ func (s *server) session(w http.ResponseWriter, r *http.Request) {
 type Indicator struct {
 	ID         string   `json:"id"`
 	Name       string   `json:"name"`
+	Category   string   `json:"category"`
 	Source     string   `json:"source"`
 	StatCode   string   `json:"stat_code"`
 	ItemCode   *string  `json:"item_code"`
@@ -357,7 +361,7 @@ type IndicatorList struct {
 
 func indicatorOut(a store.AdminIndicator) Indicator {
 	return Indicator{
-		ID: a.ID, Name: a.Name, Source: a.Source, StatCode: a.StatCode, ItemCode: a.ItemCode,
+		ID: a.ID, Name: a.Name, Category: a.Category, Source: a.Source, StatCode: a.StatCode, ItemCode: a.ItemCode,
 		Classes: nonNil(a.Classes), OrgID: a.OrgID, ValueField: a.ValueField, Cycle: a.Cycle,
 		Unit: a.Unit, SourceUnit: a.SourceUnit, Visible: a.Visible, Order: a.Order,
 		ChartPeriod: a.ChartPeriod, Decimals: a.Decimals, Notice: a.Notice, Related: nonNil(a.Related),
@@ -486,6 +490,31 @@ func (s *server) saveOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	audit(r, "save display order: %s", orderChanges(before, items))
 	s.writeIndicators(w, r)
+}
+
+// Category는 지표 구분 하나다.
+type Category struct {
+	Code  string `json:"code"`
+	Name  string `json:"name"`
+	Order int    `json:"order"`
+}
+
+// CategoryList는 GET /api/admin/categories의 응답이다(순서대로).
+type CategoryList struct {
+	Categories []Category `json:"categories"`
+}
+
+func (s *server) categories(w http.ResponseWriter, r *http.Request) {
+	list, err := s.Store.Categories(r.Context())
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
+	out := CategoryList{Categories: make([]Category, 0, len(list))}
+	for _, c := range list {
+		out.Categories = append(out.Categories, Category{Code: c.Code, Name: c.Name, Order: c.Order})
+	}
+	write(w, http.StatusOK, out)
 }
 
 // CollectTime은 수집 시각이다(HH:MM, Asia/Seoul).

@@ -7,7 +7,7 @@ import (
 )
 
 func entry(id, period string) config.Entry {
-	return config.Entry{Indicator: config.Indicator{ID: id}, Display: config.Display{ChartPeriod: period}}
+	return config.Entry{Indicator: config.Indicator{ID: id, Category: "money"}, Display: config.Display{ChartPeriod: period}}
 }
 
 func TestValidate(t *testing.T) {
@@ -24,6 +24,7 @@ func TestValidate(t *testing.T) {
 		"no id":           {entry("", "1 year")},
 		"duplicated id":   {entry("a", "1 year"), entry("a", "1 year")},
 		"no chart period": {entry("a", "")},
+		"no category":     {{Indicator: config.Indicator{ID: "a"}, Display: config.Display{ChartPeriod: "1 year"}}},
 	} {
 		if err := validate(bad); err == nil {
 			t.Errorf("%s: no error", name)

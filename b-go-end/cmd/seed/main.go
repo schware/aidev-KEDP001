@@ -71,6 +71,8 @@ func validate(entries []config.Entry) error {
 			return fmt.Errorf("%s: id is duplicated", e.ID)
 		case e.Display.ChartPeriod == "":
 			return fmt.Errorf("%s: display.chart_period is empty", e.ID)
+		case e.Category == "":
+			return fmt.Errorf("%s: category is empty", e.ID)
 		}
 		seen[e.ID] = true
 	}

@@ -93,6 +93,7 @@ docker exec kedp-postgres createdb -U sunmoon kedp_api_check
 $P < b-sql-db/migrations/0001_schema.up.sql
 $P < b-sql-db/migrations/0002_roles.up.sql
 $P < b-sql-db/migrations/0003_visits.up.sql
+$P < b-sql-db/migrations/0004_category.up.sql
 $P < b-go-end/internal/store/testdata/read.sql
 (cd b-go-end && KEDP_TEST_DB_NAME=kedp_api_check go test -count=1 ./internal/store)
 docker exec kedp-postgres dropdb -U sunmoon kedp_api_check
@@ -107,6 +108,7 @@ docker exec kedp-postgres createdb -U sunmoon kedp_admin_check
 $P < b-sql-db/migrations/0001_schema.up.sql
 $P < b-sql-db/migrations/0002_roles.up.sql
 $P < b-sql-db/migrations/0003_visits.up.sql
+$P < b-sql-db/migrations/0004_category.up.sql
 $P < b-go-end/internal/store/testdata/admin.sql
 (cd b-go-end && KEDP_ADMIN_TEST_DB_NAME=kedp_admin_check go test -count=1 ./internal/store)
 docker exec kedp-postgres dropdb -U sunmoon kedp_admin_check

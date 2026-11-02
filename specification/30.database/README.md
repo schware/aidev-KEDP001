@@ -110,12 +110,13 @@
 
 # 4. 테이블
 
-정의는 `b-sql-db/migrations/0001_schema.up.sql`(방문자 수는 `0003_visits.up.sql`)이 기준이다. 아래는 칼럼의 뜻과 규칙만 적는다.
+정의는 `b-sql-db/migrations/0001_schema.up.sql`(방문자 수는 `0003_visits.up.sql`, 지표 구분은 `0004_category.up.sql`)이 기준이다. 아래는 칼럼의 뜻과 규칙만 적는다.
 
 | 테이블 | 역할 | 주요 칼럼 |
 | --- | --- | --- |
 | `source` | 제공처 목록 | `code`(`ecos`, `kosis`, `data-go-kr`), `name`. migration이 세 행을 넣는다 |
-| `indicator` | 지표 정의. `indicators.yaml`을 대신한다 | `id`(예: `ecos-base-rate`, 화면 주소 `/indicator/{id}`에도 사용. 소문자·숫자·`-`만), `name`, `source_code`, `org_id`(KOSIS), `stat_code`, `item_code`(공공데이터포털은 비움), `classes`(text 배열, KOSIS objL1…), `value_field`(공공데이터포털 값 항목, `clpr`), `cycle`(D/M/Q/A), `unit`(관리자 단위), `source_unit`(응답 단위), `created_at`, `updated_at` |
+| `category` | 지표 구분 (4.3) | `code`(기본 키, 예: `money`), `name`(화면 이름), `sort_order`(화면에서 구분을 놓는 순서). migration이 9행을 넣는다 |
+| `indicator` | 지표 정의. `indicators.yaml`을 대신한다 | `id`(예: `ecos-base-rate`, 화면 주소 `/indicator/{id}`에도 사용. 소문자·숫자·`-`만), `name`, `category_code`(구분, 꼭 있음, 4.3), `source_code`, `org_id`(KOSIS), `stat_code`, `item_code`(공공데이터포털은 비움), `classes`(text 배열, KOSIS objL1…), `value_field`(공공데이터포털 값 항목, `clpr`), `cycle`(D/M/Q/A), `unit`(관리자 단위), `source_unit`(응답 단위), `created_at`, `updated_at` |
 | `indicator_display` | 화면 설정 (Dashboard 관리) | `indicator_id`, `is_visible`(기본 꺼짐), `sort_order`, `chart_period`(interval, 예: `10 years`), `number_format`(jsonb), `date_format`, `notice`(안내 문구, 없으면 비움) |
 | `indicator_relation` | 관련 지표 | `indicator_id`, `related_indicator_id`, `sort_order`. 자기 자신은 넣지 못한다 |
 | `app_setting` | 전체 설정 | `key`, `value`, `updated_at`. migration이 `collect_time` = `06:00`(Asia/Seoul, KEDP001-D019), `visit_total_base` = `0`(전체 방문자 수의 시작값, 0003)을 넣는다 |
@@ -137,16 +138,17 @@
 
 ## 4.1 접속 계정과 권한 (결정 14)
 
-정의는 `b-sql-db/migrations/0002_roles.up.sql`(방문자 수는 `0003_visits.up.sql`)이 기준이다. 비밀번호는 저장소에 쓰지 않는다. migration을 적용한 뒤 소유자가 psql의 `\password`로 정한다.
+정의는 `b-sql-db/migrations/0002_roles.up.sql`(방문자 수는 `0003_visits.up.sql`, 지표 구분은 `0004_category.up.sql`)이 기준이다. 비밀번호는 저장소에 쓰지 않는다. migration을 적용한 뒤 소유자가 psql의 `\password`로 정한다.
 
 | 계정 | 쓰기 | 읽기만 |
 | --- | --- | --- |
-| `kedp_go` | `indicator`, `indicator_display`, `indicator_relation`, `app_setting`, `visit_daily`(추가·수정·삭제), `collection_run`(추가·수정) | `source`, `observation`(조회 API) |
+| `kedp_go` | `indicator`, `indicator_display`, `indicator_relation`, `app_setting`, `visit_daily`(추가·수정·삭제), `collection_run`(추가·수정) | `source`, `category`, `observation`(조회 API) |
 | `kedp_rust` | `observation`(추가·수정), `observation_history`(트리거가 추가), `raw_response`(추가) | `source`, `indicator` |
 
 - `kedp_rust`는 `observation`, `raw_response`도 읽을 수 있다(덮어쓰기와 재처리).
 - 테이블을 만들고 고치는 일(migration)은 소유자 계정으로 한다.
 - `kedp_rust`는 `visit_daily`를 쓰지도 읽지도 않는다.
+- `kedp_rust`는 `category`를 읽지 않는다. `indicator.category_code`는 `indicator` 읽기 권한으로 보이지만 쓰지 않는다.
 
 ## 4.2 방문자 수 (Issue #48)
 
@@ -160,6 +162,17 @@
 | 늘리기 | 한 문장: `INSERT INTO visit_daily (day, count) VALUES (…, 1) ON CONFLICT (day) DO UPDATE SET count = visit_daily.count + 1` |
 | 시작값 | 관리자가 바꾼다(0 이상 정수). 예전 숫자를 이어 쓸 때 쓴다 |
 | 초기화 | 관리자가 한다. `visit_daily`를 모두 지우고 `visit_total_base`를 0으로 한다(한 transaction) |
+
+## 4.3 지표 구분 (KEDP001-D024, Issue #52)
+
+| 항목 | 내용 |
+| --- | --- |
+| 구분 목록 | `category` 9행: `growth` 성장·경기 1, `price` 물가 2, `labor` 고용·소득 3, `money` 금리·통화 4, `credit` 부채·금융안정 5, `external` 대외경제 6, `housing` 주택 7, `population` 인구 8, `market` 금융시장 9 |
+| 바꾸는 방법 | migration으로만 바꾼다. `kedp_go`는 읽기만 한다 |
+| 지표의 구분 | `indicator.category_code` NOT NULL, `category(code)`를 가리킨다(제약 이름 `indicator_category_code_fkey`). 지표 하나에 구분 하나다 |
+| 처음 값 | `0004`가 지금 지표 7개를 채운다: `ecos-base-rate` money, `kosis-employment-rate` labor, `kosis-total-population`·`kosis-births` population, `data-go-kr-kodex-200`·`data-go-kr-kodex-leverage`·`data-go-kr-kodex-inverse` market |
+| 그 밖의 지표 | 짐작해서 채우지 않는다. 하나라도 있으면 `0004`는 `SET NOT NULL`에서 멈추고(어느 지표인지 NOTICE로 알린다) 한 transaction이라 아무것도 바뀌지 않는다 |
+| 화면 순서 | 공개 화면은 `category.sort_order` → `indicator_display.sort_order` → `id` 순서다(`specification/40.api/README.md` 2장) |
 
 ---
 

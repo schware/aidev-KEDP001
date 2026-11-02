@@ -1,18 +1,19 @@
--- read_test.go의 시험 데이터. 0001, 0002 migration을 적용한 시험 DB에 superuser로 넣는다.
+-- read_test.go의 시험 데이터. 0001~0004 migration을 적용한 시험 DB에 superuser로 넣는다.
 -- kedp DB에는 넣지 않는다.
 
 \set ON_ERROR_STOP on
 BEGIN;
 
-INSERT INTO indicator (id, name, source_code, stat_code, item_code, org_id, value_field, cycle, unit, source_unit) VALUES
+-- 구분: t-rate money(4), t-pop population(8). 카드는 구분 순서가 먼저라 sort_order와 반대로 t-rate가 앞이다.
+INSERT INTO indicator (id, name, source_code, stat_code, item_code, org_id, value_field, cycle, unit, source_unit, category_code) VALUES
     -- 관리자 단위가 응답 단위보다 먼저다
-    ('t-rate', '금리', 'ecos', '722Y001', '0101000', NULL, NULL, 'M', '%', '연%'),
+    ('t-rate', '금리', 'ecos', '722Y001', '0101000', NULL, NULL, 'M', '%', '연%', 'money'),
     -- 관리자 단위가 없으면 응답 단위다
-    ('t-pop', '인구', 'kosis', 'DT_1', 'T1', '101', NULL, 'A', NULL, '명'),
+    ('t-pop', '인구', 'kosis', 'DT_1', 'T1', '101', NULL, 'A', NULL, '명', 'population'),
     -- 노출하지 않는다
-    ('t-hidden', '숨김', 'data-go-kr', '069500', NULL, NULL, 'clpr', 'D', NULL, NULL),
+    ('t-hidden', '숨김', 'data-go-kr', '069500', NULL, NULL, 'clpr', 'D', NULL, NULL, 'market'),
     -- 화면 설정이 없다. 빈 단위는 없는 것과 같다
-    ('t-bare', '설정 없음', 'ecos', 'X', 'Y', NULL, NULL, 'Q', '', '');
+    ('t-bare', '설정 없음', 'ecos', 'X', 'Y', NULL, NULL, 'Q', '', '', 'money');
 
 -- 소수 자릿수: t-rate 2, t-pop은 없다
 INSERT INTO indicator_display (indicator_id, is_visible, sort_order, chart_period, number_format, notice) VALUES

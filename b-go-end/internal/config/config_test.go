@@ -127,21 +127,21 @@ func TestLoadIndicators(t *testing.T) {
 	}
 
 	want := Entry{
-		Indicator: Indicator{ID: "ecos-base-rate", Name: "한국은행 기준금리", Source: "ecos", StatCode: "722Y001", ItemCode: "0101000", Cycle: "M"},
+		Indicator: Indicator{ID: "ecos-base-rate", Name: "한국은행 기준금리", Source: "ecos", StatCode: "722Y001", ItemCode: "0101000", Cycle: "M", Category: "money"},
 		Display:   Display{Visible: true, Order: 1, ChartPeriod: "10 years"},
 	}
 	if got := byID["ecos-base-rate"]; !reflect.DeepEqual(got, want) {
 		t.Errorf("ecos-base-rate = %+v", got)
 	}
 	want = Entry{
-		Indicator: Indicator{ID: "kosis-births", Name: "출생아 수", Source: "kosis", OrgID: "101", StatCode: "INH_1B8000F_01", ItemCode: "T1", Classes: []string{"11"}, Cycle: "A"},
+		Indicator: Indicator{ID: "kosis-births", Name: "출생아 수", Source: "kosis", OrgID: "101", StatCode: "INH_1B8000F_01", ItemCode: "T1", Classes: []string{"11"}, Cycle: "A", Category: "population"},
 		Display:   Display{Visible: true, Order: 4, ChartPeriod: "20 years"},
 	}
 	if got := byID["kosis-births"]; !reflect.DeepEqual(got, want) {
 		t.Errorf("kosis-births = %+v", got)
 	}
 	want = Entry{
-		Indicator: Indicator{ID: "data-go-kr-kodex-leverage", Name: "KODEX 레버리지", Source: "data-go-kr", StatCode: "122630", ValueField: "clpr", Cycle: "D"},
+		Indicator: Indicator{ID: "data-go-kr-kodex-leverage", Name: "KODEX 레버리지", Source: "data-go-kr", StatCode: "122630", ValueField: "clpr", Cycle: "D", Category: "market"},
 		Display:   Display{Visible: true, Order: 6, ChartPeriod: "1 year", Notice: "이 정보는 신뢰할 수 없습니다. 투자 판단에 사용하지 마십시오."},
 	}
 	if got := byID["data-go-kr-kodex-leverage"]; !reflect.DeepEqual(got, want) {

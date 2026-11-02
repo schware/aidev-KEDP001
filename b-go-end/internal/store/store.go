@@ -3,6 +3,7 @@
 //   - 쓰는 테이블: indicator, indicator_display(처음 값), collection_run
 //   - 읽는 테이블: app_setting(collect_time), observation(마지막 기간)
 //   - 조회 API(read.go): indicator, indicator_display, indicator_relation, source, observation, collection_run을 읽기만 한다
+//   - 구분(category): 읽기만 한다. 목록은 migration으로만 바꾼다. 지표의 구분은 indicator.category_code다
 //   - 방문자 수(visit.go): visit_daily, app_setting(visit_total_base)를 읽고 쓴다. 날짜별 숫자만 다룬다
 //
 // 오류와 기록에는 접속 정보(주소, 포트, DB 이름, 비밀번호)를 넣지 않는다.
@@ -179,10 +180,10 @@ func (s *Store) Seed(ctx context.Context, entries []config.Entry) (SeedResult, e
 				classes = []string{} // NULL이 아니라 빈 배열이다(NOT NULL)
 			}
 			tag, err := tx.Exec(ctx, `
-				INSERT INTO indicator (id, name, source_code, org_id, stat_code, item_code, classes, value_field, cycle)
-				VALUES ($1, $2, $3, NULLIF($4, ''), $5, NULLIF($6, ''), $7, NULLIF($8, ''), $9)
+				INSERT INTO indicator (id, name, source_code, org_id, stat_code, item_code, classes, value_field, cycle, category_code)
+				VALUES ($1, $2, $3, NULLIF($4, ''), $5, NULLIF($6, ''), $7, NULLIF($8, ''), $9, $10)
 				ON CONFLICT (id) DO NOTHING`,
-				ind.ID, ind.Name, ind.Source, ind.OrgID, ind.StatCode, ind.ItemCode, classes, ind.ValueField, ind.Cycle)
+				ind.ID, ind.Name, ind.Source, ind.OrgID, ind.StatCode, ind.ItemCode, classes, ind.ValueField, ind.Cycle, ind.Category)
 			if err != nil {
 				return wrap("insert indicator "+ind.ID, err)
 			}

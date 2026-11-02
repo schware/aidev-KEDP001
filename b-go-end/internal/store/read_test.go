@@ -12,7 +12,7 @@ import (
 )
 
 // openTestDB는 KEDP_TEST_DB_NAME 시험 DB에 kedp_go로 접속한다. 변수가 없으면 시험을 건너뛴다.
-// 시험 DB에는 migration 0001, 0002와 testdata/read.sql을 넣어 둔다(b-go-end/README.md).
+// 시험 DB에는 migration 0001~0004와 testdata/read.sql을 넣어 둔다(b-go-end/README.md).
 func openTestDB(t *testing.T) *Store { return openDB(t, "KEDP_TEST_DB_NAME") }
 
 // openDB는 변수 env가 가리키는 시험 DB에 kedp_go로 접속한다. 변수가 없으면 시험을 건너뛴다.
@@ -59,10 +59,13 @@ func TestCards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 노출된 것만, sort_order 순서다. t-hidden(노출 안 함), t-bare(화면 설정 없음)는 없다.
+	// 노출된 것만, 구분 순서(money 4, population 8)가 먼저이고 그다음 sort_order다.
+	// t-hidden(노출 안 함), t-bare(화면 설정 없음)는 없다.
 	want := []Card{
-		{ID: "t-pop", Name: "인구", Cycle: "A", Unit: ptr("명"), Latest: ptr(pt("2025-01-01", 51684564))},
-		{ID: "t-rate", Name: "금리", Cycle: "M", Unit: ptr("%"), Decimals: ptr(2), Latest: ptr(pt("2026-09-01", 2.5))},
+		{ID: "t-rate", Name: "금리", Cycle: "M", CategoryCode: "money", CategoryName: "금리·통화",
+			Unit: ptr("%"), Decimals: ptr(2), Latest: ptr(pt("2026-09-01", 2.5))},
+		{ID: "t-pop", Name: "인구", Cycle: "A", CategoryCode: "population", CategoryName: "인구",
+			Unit: ptr("명"), Latest: ptr(pt("2025-01-01", 51684564))},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got  %+v\nwant %+v", got, want)
@@ -81,6 +84,7 @@ func TestDetail(t *testing.T) {
 	got.LastCollectedAt = nil
 	want := Detail{
 		ID: "t-rate", Name: "금리", Cycle: "M", StatCode: "722Y001", SourceCode: "ecos", SourceName: "ECOS",
+		CategoryCode: "money", CategoryName: "금리·통화",
 		Unit: ptr("%"), Decimals: ptr(2), ChartPeriod: ptr("1 year"),
 		Latest: ptr(pt("2026-09-01", 2.5)),
 		// 2025-10-30 이후, 오래된 것부터. 이전 주기(Q) 값은 없다.
@@ -113,6 +117,7 @@ func TestDetailWithoutDisplay(t *testing.T) {
 	}
 	want := Detail{
 		ID: "t-bare", Name: "설정 없음", Cycle: "Q", StatCode: "X", SourceCode: "ecos", SourceName: "ECOS",
+		CategoryCode: "money", CategoryName: "금리·통화",
 		Chart: []Point{}, Recent: []Point{}, Related: []Related{},
 	}
 	if !reflect.DeepEqual(got, want) {

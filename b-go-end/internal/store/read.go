@@ -11,6 +11,7 @@ import (
 // 조회 API(사용자 화면)가 읽는 값이다. 읽기만 한다.
 // 단위는 관리자 단위(unit)가 있으면 그것, 없으면 응답 단위(source_unit), 둘 다 없으면 nil이다(KEDP001-D022 9).
 // 관측값은 지표의 지금 주기(indicator.cycle) 것만 읽는다(KEDP001-D022 11).
+// 구분(category)은 code와 이름을 함께 읽는다(Issue #52).
 
 // ErrNotFound는 지표가 없다는 오류다.
 var ErrNotFound = errors.New("not found")
@@ -24,7 +25,9 @@ type Point struct {
 // Card는 메인 화면 카드 하나다. 관측값이 없으면 Latest가 nil이다.
 type Card struct {
 	ID, Name, Cycle string
-	Unit            *string
+	// CategoryCode, CategoryName은 지표의 구분이다.
+	CategoryCode, CategoryName string
+	Unit                       *string
 	// Decimals는 소수 자릿수(indicator_display.number_format의 decimals, 0~4)다. 없으면 nil이다.
 	Decimals *int
 	Latest   *Point
@@ -46,14 +49,16 @@ const latestJoin = `
 		LIMIT 1
 	) o ON true`
 
-// Cards는 노출(is_visible)된 지표를 순서(sort_order, 그다음 id)대로 읽는다.
+// Cards는 노출(is_visible)된 지표를 구분 순서(category.sort_order), 그다음 화면 순서(sort_order, id)대로 읽는다.
+// 화면은 받은 순서대로 구분을 묶는다.
 func (s *Store) Cards(ctx context.Context) ([]Card, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT i.id, i.name, i.cycle, `+unitExpr+`, `+decimalsExpr+`, o.value, o.period_start
+		SELECT i.id, i.name, i.cycle, c.code, c.name, `+unitExpr+`, `+decimalsExpr+`, o.value, o.period_start
 		FROM indicator i
+		JOIN category c ON c.code = i.category_code
 		JOIN indicator_display d ON d.indicator_id = i.id`+latestJoin+`
 		WHERE d.is_visible
-		ORDER BY d.sort_order, i.id`)
+		ORDER BY c.sort_order, d.sort_order, i.id`)
 	if err != nil {
 		return nil, wrap("read cards", err)
 	}
@@ -61,7 +66,7 @@ func (s *Store) Cards(ctx context.Context) ([]Card, error) {
 		var c Card
 		var value *float64
 		var period *time.Time
-		err := row.Scan(&c.ID, &c.Name, &c.Cycle, &c.Unit, &c.Decimals, &value, &period)
+		err := row.Scan(&c.ID, &c.Name, &c.Cycle, &c.CategoryCode, &c.CategoryName, &c.Unit, &c.Decimals, &value, &period)
 		c.Latest = point(value, period)
 		return c, err
 	})
@@ -83,9 +88,10 @@ type Related struct{ ID, Name string }
 
 // Detail은 지표 상세 화면의 값이다.
 type Detail struct {
-	ID, Name, Cycle, StatCode string
-	SourceCode, SourceName    string
-	Unit, Notice              *string
+	ID, Name, Cycle, StatCode  string
+	SourceCode, SourceName     string
+	CategoryCode, CategoryName string
+	Unit, Notice               *string
 	// Decimals는 소수 자릿수다(Card와 같다).
 	Decimals *int
 	// ChartPeriod는 차트 기간(PostgreSQL interval 글, 예: 10 years)이다. 화면 설정이 없으면 nil이다.
@@ -108,15 +114,16 @@ func (s *Store) Detail(ctx context.Context, id string, today time.Time, recent i
 	var value *float64
 	var period *time.Time
 	err := s.pool.QueryRow(ctx, `
-		SELECT i.id, i.name, i.cycle, i.stat_code, src.code, src.name, `+unitExpr+`, `+decimalsExpr+`,
+		SELECT i.id, i.name, i.cycle, i.stat_code, src.code, src.name, c.code, c.name, `+unitExpr+`, `+decimalsExpr+`,
 		       d.notice, d.chart_period::text, o.value, o.period_start,
 		       (SELECT max(r.finished_at) FROM collection_run r
 		        WHERE r.indicator_id = i.id AND r.status = 'success')
 		FROM indicator i
 		JOIN source src ON src.code = i.source_code
+		JOIN category c ON c.code = i.category_code
 		LEFT JOIN indicator_display d ON d.indicator_id = i.id`+latestJoin+`
 		WHERE i.id = $1`, id).Scan(
-		&d.ID, &d.Name, &d.Cycle, &d.StatCode, &d.SourceCode, &d.SourceName, &d.Unit, &d.Decimals,
+		&d.ID, &d.Name, &d.Cycle, &d.StatCode, &d.SourceCode, &d.SourceName, &d.CategoryCode, &d.CategoryName, &d.Unit, &d.Decimals,
 		&d.Notice, &d.ChartPeriod, &value, &period, &d.LastCollectedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Detail{}, ErrNotFound

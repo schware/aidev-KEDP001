@@ -26,11 +26,13 @@ func (e *FieldError) Error() string { return e.Field + ": " + e.Reason }
 // AdminIndicator는 관리자 지표 목록의 지표 하나다. 화면 설정이 없으면 Visible은 false, Order와 ChartPeriod는 nil이다.
 type AdminIndicator struct {
 	ID, Name, Source, StatCode, Cycle string
-	OrgID, ItemCode, ValueField       *string
-	Classes                           []string
-	Unit, SourceUnit                  *string
-	HasDisplay, Visible               bool
-	Order                             *int
+	// Category는 구분 code다(category.code).
+	Category                    string
+	OrgID, ItemCode, ValueField *string
+	Classes                     []string
+	Unit, SourceUnit            *string
+	HasDisplay, Visible         bool
+	Order                       *int
 	// ChartPeriod는 차트 기간이다(N years, N months, N days). 그렇게 쓸 수 없는 기간은 PostgreSQL interval 글이다.
 	ChartPeriod *string
 	Decimals    *int
@@ -63,7 +65,7 @@ type querier interface {
 // adminIndicators는 id가 비어 있으면 모든 지표, 아니면 그 지표만 읽는다.
 func (s *Store) adminIndicators(ctx context.Context, q querier, id string) ([]AdminIndicator, error) {
 	rows, err := q.Query(ctx, `
-		SELECT i.id, i.name, i.source_code, i.stat_code, i.cycle, i.org_id, i.item_code, i.value_field,
+		SELECT i.id, i.name, i.source_code, i.stat_code, i.cycle, i.category_code, i.org_id, i.item_code, i.value_field,
 		       i.classes, i.unit, i.source_unit,
 		       d.indicator_id IS NOT NULL, coalesce(d.is_visible, false), d.sort_order, d.chart_period,
 		       `+decimalsExpr+`, d.notice,
@@ -79,7 +81,7 @@ func (s *Store) adminIndicators(ctx context.Context, q querier, id string) ([]Ad
 	list, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (AdminIndicator, error) {
 		var a AdminIndicator
 		var period pgtype.Interval
-		err := row.Scan(&a.ID, &a.Name, &a.Source, &a.StatCode, &a.Cycle, &a.OrgID, &a.ItemCode, &a.ValueField,
+		err := row.Scan(&a.ID, &a.Name, &a.Source, &a.StatCode, &a.Cycle, &a.Category, &a.OrgID, &a.ItemCode, &a.ValueField,
 			&a.Classes, &a.Unit, &a.SourceUnit,
 			&a.HasDisplay, &a.Visible, &a.Order, &period, &a.Decimals, &a.Notice, &a.Related)
 		if period.Valid {
@@ -111,6 +113,7 @@ func FormatPeriod(p pgtype.Interval) string {
 // NewIndicator는 새 지표다. 빈 글자는 NULL로 넣는다(org_id, item_code, value_field, unit, notice).
 type NewIndicator struct {
 	ID, Name, Source, StatCode, Cycle string
+	Category                          string
 	OrgID, ItemCode, ValueField, Unit string
 	Classes                           []string
 	Visible                           bool
@@ -121,7 +124,7 @@ type NewIndicator struct {
 }
 
 // AddIndicator는 지표와 화면 설정, 관련 지표를 한 transaction으로 넣는다. 순서는 맨 뒤다.
-// 같은 id가 있으면 ErrExists, 없는 관련 지표가 있으면 *FieldError다.
+// 같은 id가 있으면 ErrExists, 없는 구분이나 관련 지표가 있으면 *FieldError다.
 func (s *Store) AddIndicator(ctx context.Context, n NewIndicator) error {
 	classes := n.Classes
 	if classes == nil {
@@ -129,11 +132,14 @@ func (s *Store) AddIndicator(ctx context.Context, n NewIndicator) error {
 	}
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
-			INSERT INTO indicator (id, name, source_code, org_id, stat_code, item_code, classes, value_field, cycle, unit)
-			VALUES ($1, $2, $3, NULLIF($4, ''), $5, NULLIF($6, ''), $7, NULLIF($8, ''), $9, NULLIF($10, ''))`,
-			n.ID, n.Name, n.Source, n.OrgID, n.StatCode, n.ItemCode, classes, n.ValueField, n.Cycle, n.Unit)
+			INSERT INTO indicator (id, name, source_code, org_id, stat_code, item_code, classes, value_field, cycle, unit, category_code)
+			VALUES ($1, $2, $3, NULLIF($4, ''), $5, NULLIF($6, ''), $7, NULLIF($8, ''), $9, NULLIF($10, ''), $11)`,
+			n.ID, n.Name, n.Source, n.OrgID, n.StatCode, n.ItemCode, classes, n.ValueField, n.Cycle, n.Unit, n.Category)
 		if isCode(err, "23505") {
 			return ErrExists
+		}
+		if fe := categoryError(err, n.Category); fe != nil {
+			return fe
 		}
 		if err != nil {
 			return wrap("insert indicator", err)
@@ -158,6 +164,7 @@ func numberFormat(base, param string) string {
 // Edit는 지표에서 바꿀 수 있는 값이다. id, 제공처, 코드, 노출, 순서는 바꾸지 않는다.
 type Edit struct {
 	Name, Cycle, Unit string
+	Category          string
 	ChartPeriod       string
 	Decimals          *int
 	Notice            string
@@ -166,13 +173,16 @@ type Edit struct {
 
 // UpdateIndicator는 지표 id를 e로 고친다. 관련 지표는 e.Related로 바꾼다. 한 transaction이다.
 // 화면 설정이 없던 지표는 노출 안 함, 맨 뒤 순서로 화면 설정을 만든다.
-// 지표가 없으면 ErrNotFound, 없는 관련 지표가 있으면 *FieldError다.
+// 지표가 없으면 ErrNotFound, 없는 구분이나 관련 지표가 있으면 *FieldError다.
 // 주기를 바꿔도 이전 주기의 관측값은 남는다(KEDP001-D022 11).
 func (s *Store) UpdateIndicator(ctx context.Context, id string, e Edit) error {
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `
-			UPDATE indicator SET name = $2, cycle = $3, unit = NULLIF($4, ''), updated_at = now()
-			WHERE id = $1`, id, e.Name, e.Cycle, e.Unit)
+			UPDATE indicator SET name = $2, cycle = $3, unit = NULLIF($4, ''), category_code = $5, updated_at = now()
+			WHERE id = $1`, id, e.Name, e.Cycle, e.Unit, e.Category)
+		if fe := categoryError(err, e.Category); fe != nil {
+			return fe
+		}
 		if err != nil {
 			return wrap("update indicator", err)
 		}
@@ -195,6 +205,34 @@ func (s *Store) UpdateIndicator(ctx context.Context, id string, e Edit) error {
 		}
 		return setRelated(ctx, tx, id, e.Related)
 	})
+}
+
+// categoryError는 err가 없는 구분(indicator_category_code_fkey 위반)이면 *FieldError, 아니면 nil이다.
+func categoryError(err error, code string) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23503" && pgErr.ConstraintName == "indicator_category_code_fkey" {
+		return &FieldError{"category", fmt.Sprintf("category %q does not exist", code)}
+	}
+	return nil
+}
+
+// Category는 지표 구분 하나다(category). 목록은 migration으로만 바꾼다.
+type Category struct {
+	Code, Name string
+	Order      int
+}
+
+// Categories는 구분을 순서(sort_order, 그다음 code)대로 읽는다.
+func (s *Store) Categories(ctx context.Context) ([]Category, error) {
+	rows, err := s.pool.Query(ctx, `SELECT code, name, sort_order FROM category ORDER BY sort_order, code`)
+	if err != nil {
+		return nil, wrap("read category", err)
+	}
+	list, err := pgx.CollectRows(rows, pgx.RowToStructByPos[Category])
+	if err != nil {
+		return nil, wrap("read category", err)
+	}
+	return list, nil
 }
 
 // setRelated는 관련 지표를 related 순서대로 넣는다. 없는 지표가 있으면 *FieldError다.

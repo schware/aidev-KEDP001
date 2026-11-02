@@ -32,6 +32,7 @@ type fakeStore struct {
 	order       []store.OrderItem
 	collectTime string
 	runs        []store.SourceRun
+	categories  []store.Category
 	// 방문자 수(visits_test.go)
 	visits     store.VisitStats
 	visitToday time.Time
@@ -73,6 +74,8 @@ func (f *fakeStore) SaveOrder(_ context.Context, items []store.OrderItem) error 
 	f.order = items
 	return f.err
 }
+
+func (f *fakeStore) Categories(context.Context) ([]store.Category, error) { return f.categories, f.err }
 
 func (f *fakeStore) CollectTime(context.Context) (string, error) { return f.collectTime, f.err }
 
@@ -180,6 +183,7 @@ var protected = []struct{ method, path, body string }{
 	{http.MethodPost, "/api/admin/indicators", "{}"},
 	{http.MethodPut, "/api/admin/indicators/x", "{}"},
 	{http.MethodPut, "/api/admin/display-order", "{}"},
+	{http.MethodGet, "/api/admin/categories", ""},
 	{http.MethodGet, "/api/admin/collect-time", ""},
 	{http.MethodPut, "/api/admin/collect-time", "{}"},
 	{http.MethodGet, "/api/admin/sources", ""},
@@ -240,6 +244,7 @@ func TestLoggedIn(t *testing.T) {
 	for _, c := range []struct{ method, path string }{
 		{http.MethodGet, "/api/admin/session"},
 		{http.MethodGet, "/api/admin/indicators"},
+		{http.MethodGet, "/api/admin/categories"},
 		{http.MethodGet, "/api/admin/collect-time"},
 		{http.MethodGet, "/api/admin/sources"},
 	} {
@@ -453,13 +458,13 @@ func TestAddIndicator(t *testing.T) {
 	x := newHarness(t, st)
 	token := x.login()
 	res := x.do(http.MethodPost, "/api/admin/indicators", `{
-		"id":"kosis-kospi","name":" 코스피 ","source":"kosis","stat_code":"DT_1","item_code":"T1","classes":["00"],
+		"id":"kosis-kospi","name":" 코스피 ","category":" market ","source":"kosis","stat_code":"DT_1","item_code":"T1","classes":["00"],
 		"org_id":"101","cycle":"M","unit":"","visible":true,"chart_period":"10 years","decimals":2,
 		"notice":null,"related":["ecos-base-rate"]}`, allowedAddr, token)
 	if res.code != http.StatusCreated {
 		t.Fatalf("got %d %s", res.code, res.body)
 	}
-	want := store.NewIndicator{ID: "kosis-kospi", Name: "코스피", Source: "kosis", StatCode: "DT_1", Cycle: "M",
+	want := store.NewIndicator{ID: "kosis-kospi", Name: "코스피", Category: "market", Source: "kosis", StatCode: "DT_1", Cycle: "M",
 		OrgID: "101", ItemCode: "T1", Classes: []string{"00"}, Visible: true, ChartPeriod: "10 years",
 		Decimals: ptr(2), Related: []string{"ecos-base-rate"}}
 	if !reflect.DeepEqual(*st.added, want) {
@@ -471,19 +476,19 @@ func TestAddIndicatorInvalid(t *testing.T) {
 	x := newHarness(t, &fakeStore{})
 	token := x.login()
 	for _, c := range []struct{ body, want string }{
-		{`{}`, `{"error":"invalid input","fields":{"chart_period":"required","cycle":"required","id":"required",` +
+		{`{}`, `{"error":"invalid input","fields":{"category":"required","chart_period":"required","cycle":"required","id":"required",` +
 			`"name":"required","source":"required","stat_code":"required"}}`},
-		{`{"id":"Bad_ID","name":"x","source":"ecos","stat_code":"S","cycle":"Y","chart_period":"10 year","decimals":5,` +
+		{`{"id":"Bad_ID","name":"x","category":"money","source":"ecos","stat_code":"S","cycle":"Y","chart_period":"10 year","decimals":5,` +
 			`"related":["Bad_ID"]}`,
 			`{"error":"invalid input","fields":{"chart_period":"must be \"N years\", \"N months\" or \"N days\" (N 1-9999)",` +
 				`"cycle":"must be one of D, M, Q, A","decimals":"must be 0-4 or null",` +
 				`"id":"must be lowercase letters and digits joined by '-' (e.g. kosis-kospi)",` +
 				`"item_code":"required for ecos","related":"must not include the indicator itself"}}`},
-		{`{"id":"k","name":"x","source":"kosis","stat_code":"S","cycle":"M","chart_period":"1 years"}`,
+		{`{"id":"k","name":"x","category":"money","source":"kosis","stat_code":"S","cycle":"M","chart_period":"1 years"}`,
 			`{"error":"invalid input","fields":{"item_code":"required for kosis","org_id":"required for kosis"}}`},
-		{`{"id":"d","name":"x","source":"data-go-kr","stat_code":"069500","item_code":"x","cycle":"D","chart_period":"30 days",` +
+		{`{"id":"d","name":"x","category":" ","source":"data-go-kr","stat_code":"069500","item_code":"x","cycle":"D","chart_period":"30 days",` +
 			`"related":["a","a"],"classes":[" "]}`,
-			`{"error":"invalid input","fields":{"classes":"must not contain empty codes",` +
+			`{"error":"invalid input","fields":{"category":"required","classes":"must not contain empty codes",` +
 				`"item_code":"must be empty for data-go-kr","related":"indicator \"a\" is listed twice",` +
 				`"value_field":"required for data-go-kr"}}`},
 		{`{"decimals":2.5}`, `{"error":"invalid input","fields":{"decimals":"must be an integer"}}`},
@@ -500,7 +505,7 @@ func TestAddIndicatorInvalid(t *testing.T) {
 }
 
 func TestAddIndicatorStoreErrors(t *testing.T) {
-	body := `{"id":"e","name":"x","source":"ecos","stat_code":"S","item_code":"I","cycle":"M","chart_period":"5 years","related":["none"]}`
+	body := `{"id":"e","name":"x","category":"none","source":"ecos","stat_code":"S","item_code":"I","cycle":"M","chart_period":"5 years","related":["none"]}`
 	for _, c := range []struct {
 		err  error
 		code int
@@ -509,6 +514,8 @@ func TestAddIndicatorStoreErrors(t *testing.T) {
 		{store.ErrExists, http.StatusConflict, `{"error":"indicator already exists"}`},
 		{&store.FieldError{Field: "related", Reason: `indicator "none" does not exist`}, http.StatusBadRequest,
 			`{"error":"invalid input","fields":{"related":"indicator \"none\" does not exist"}}`},
+		{&store.FieldError{Field: "category", Reason: `category "none" does not exist`}, http.StatusBadRequest,
+			`{"error":"invalid input","fields":{"category":"category \"none\" does not exist"}}`},
 		{errors.New("secret detail"), http.StatusInternalServerError, `{"error":"internal error"}`},
 	} {
 		x := newHarness(t, &fakeStore{err: c.err})
@@ -525,24 +532,26 @@ func TestEditIndicator(t *testing.T) {
 	x := newHarness(t, st)
 	token := x.login()
 	res := x.do(http.MethodPut, "/api/admin/indicators/a",
-		`{"name":"A2","cycle":"Q","chart_period":"24 months","notice":"  ","related":[]}`, allowedAddr, token)
+		`{"name":"A2","category":"price","cycle":"Q","chart_period":"24 months","notice":"  ","related":[]}`, allowedAddr, token)
 	if res.code != http.StatusOK {
 		t.Fatalf("got %d %s", res.code, res.body)
 	}
-	want := store.Edit{Name: "A2", Cycle: "Q", ChartPeriod: "24 months", Related: []string{}}
+	want := store.Edit{Name: "A2", Category: "price", Cycle: "Q", ChartPeriod: "24 months", Related: []string{}}
 	if !reflect.DeepEqual(*st.edited, want) {
 		t.Errorf("edited %+v, want %+v", *st.edited, want)
 	}
 	// id, 제공처, 코드는 바꾸지 않는다. related는 꼭 보낸다.
 	for _, c := range []struct{ body, want string }{
-		{`{"name":"A","cycle":"M","chart_period":"1 years","related":[],"source":"kosis"}`,
+		{`{"name":"A","category":"money","cycle":"M","chart_period":"1 years","related":[],"source":"kosis"}`,
 			`{"error":"invalid input","fields":{"source":"unknown field"}}`},
-		{`{"name":"A","cycle":"M","chart_period":"1 years","related":[],"id":"b"}`,
+		{`{"name":"A","category":"money","cycle":"M","chart_period":"1 years","related":[],"id":"b"}`,
 			`{"error":"invalid input","fields":{"id":"unknown field"}}`},
-		{`{"name":"A","cycle":"M","chart_period":"1 years"}`,
+		{`{"name":"A","category":"money","cycle":"M","chart_period":"1 years"}`,
 			`{"error":"invalid input","fields":{"related":"required (use [] for none)"}}`},
-		{`{"name":"A","cycle":"M","chart_period":"1 years","related":["a"]}`,
+		{`{"name":"A","category":"money","cycle":"M","chart_period":"1 years","related":["a"]}`,
 			`{"error":"invalid input","fields":{"related":"must not include the indicator itself"}}`},
+		{`{"name":"A","cycle":"M","chart_period":"1 years","related":[]}`,
+			`{"error":"invalid input","fields":{"category":"required"}}`},
 	} {
 		res := x.do(http.MethodPut, "/api/admin/indicators/a", c.body, allowedAddr, token)
 		if res.code != http.StatusBadRequest || res.body != c.want {
@@ -550,9 +559,55 @@ func TestEditIndicator(t *testing.T) {
 		}
 	}
 	res = x.do(http.MethodPut, "/api/admin/indicators/none",
-		`{"name":"A","cycle":"M","chart_period":"1 years","related":[]}`, allowedAddr, token)
+		`{"name":"A","category":"money","cycle":"M","chart_period":"1 years","related":[]}`, allowedAddr, token)
 	if res.code != http.StatusNotFound || res.body != `{"error":"indicator not found"}` {
 		t.Errorf("not found: got %d %s", res.code, res.body)
+	}
+}
+
+func TestEditIndicatorUnknownCategory(t *testing.T) {
+	// 없는 구분은 DB(외래 키)가 찾는다. store는 *FieldError를 돌려준다.
+	st := &fakeStore{list: []store.AdminIndicator{{ID: "a", Name: "A", Cycle: "M"}},
+		err: &store.FieldError{Field: "category", Reason: `category "none" does not exist`}}
+	x := newHarness(t, st)
+	token := x.login()
+	res := x.do(http.MethodPut, "/api/admin/indicators/a",
+		`{"name":"A","category":"none","cycle":"M","chart_period":"1 years","related":[]}`, allowedAddr, token)
+	if want := `{"error":"invalid input","fields":{"category":"category \"none\" does not exist"}}`; res.code != http.StatusBadRequest || res.body != want {
+		t.Errorf("got %d %s", res.code, res.body)
+	}
+}
+
+func TestIndicatorCategory(t *testing.T) {
+	st := &fakeStore{list: []store.AdminIndicator{{ID: "a", Name: "A", Category: "money", Source: "ecos", Cycle: "M"}}}
+	x := newHarness(t, st)
+	token := x.login()
+	res := x.do(http.MethodGet, "/api/admin/indicators", "", allowedAddr, token)
+	if !strings.HasPrefix(res.body, `{"indicators":[{"id":"a","name":"A","category":"money","source":"ecos",`) {
+		t.Errorf("got %d %s", res.code, res.body)
+	}
+}
+
+func TestCategories(t *testing.T) {
+	st := &fakeStore{categories: []store.Category{{Code: "growth", Name: "성장·경기", Order: 1}, {Code: "price", Name: "물가", Order: 2}}}
+	x := newHarness(t, st)
+	token := x.login()
+	res := x.do(http.MethodGet, "/api/admin/categories", "", allowedAddr, token)
+	want := `{"categories":[{"code":"growth","name":"성장·경기","order":1},{"code":"price","name":"물가","order":2}]}`
+	if res.code != http.StatusOK || res.body != want {
+		t.Errorf("got %d %s", res.code, res.body)
+	}
+	if res.header.Get("Cache-Control") != "no-store" {
+		t.Errorf("Cache-Control = %q", res.header.Get("Cache-Control"))
+	}
+	res = x.do(http.MethodPost, "/api/admin/categories", "{}", allowedAddr, token)
+	if res.code != http.StatusMethodNotAllowed {
+		t.Errorf("POST: got %d %s", res.code, res.body)
+	}
+	x.st.err = errors.New("secret detail")
+	res = x.do(http.MethodGet, "/api/admin/categories", "", allowedAddr, token)
+	if res.code != http.StatusInternalServerError || res.body != `{"error":"internal error"}` {
+		t.Errorf("error: got %d %s", res.code, res.body)
 	}
 }
 

@@ -6,6 +6,7 @@
 # KOSIS: org_id=orgId, stat_code=tblId, item_code=itmId, classes=objL1…
 # 공공데이터포털(getETFPriceInfo_V2): stat_code=srtnCd(종목 코드), item_code 없음, value_field=clpr(KEDP001-D022 8)
 # cycle: D/M/Q/A. 연은 A이고, KOSIS에 요청할 때만 Y로 바꾼다(KEDP001-D022 3).
+# category: 구분 code(category.code, b-sql-db/migrations/0004_category.up.sql). 없는 code면 seed가 실패한다.
 # display.chart_period: 상세 화면 차트 기간(PostgreSQL interval). 관측값이 없을 때 처음 수집할 과거 범위다(KEDP001-D022 12).
 indicators:
   - id: ecos-base-rate
@@ -14,6 +15,7 @@ indicators:
     stat_code: 722Y001
     item_code: "0101000"
     cycle: M
+    category: money
     display: { visible: true, order: 1, chart_period: 10 years }
 
   - id: kosis-employment-rate
@@ -24,6 +26,7 @@ indicators:
     item_code: T90
     classes: ["0"] # 성별: 계
     cycle: M
+    category: labor
     display: { visible: true, order: 2, chart_period: 10 years }
 
   - id: kosis-total-population
@@ -34,6 +37,7 @@ indicators:
     item_code: T100
     classes: ["00"] # 행정구역별: 전국
     cycle: A
+    category: population
     display: { visible: true, order: 3, chart_period: 20 years }
 
   - id: kosis-births
@@ -44,6 +48,7 @@ indicators:
     item_code: T1
     classes: ["11"] # 기본항목별: 출생아수(명)
     cycle: A
+    category: population
     display: { visible: true, order: 4, chart_period: 20 years }
 
   - id: data-go-kr-kodex-200
@@ -52,6 +57,7 @@ indicators:
     stat_code: "069500"
     value_field: clpr
     cycle: D
+    category: market
     display: { visible: true, order: 5, chart_period: 1 year }
 
   - id: data-go-kr-kodex-leverage
@@ -60,6 +66,7 @@ indicators:
     stat_code: "122630"
     value_field: clpr
     cycle: D
+    category: market
     display:
       visible: true
       order: 6
@@ -72,6 +79,7 @@ indicators:
     stat_code: "114800"
     value_field: clpr
     cycle: D
+    category: market
     display:
       visible: true
       order: 7

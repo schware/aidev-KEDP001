@@ -1,6 +1,6 @@
 // Package api는 사용자 화면이 쓰는 조회 API다(specification/40.api/README.md). 지표는 DB에서 읽기만 한다.
 //
-//	GET /api/indicators        메인 화면 카드 목록
+//	GET /api/indicators        메인 화면 카드 목록(구분 순서, 그다음 화면 순서)
 //	GET /api/indicators/{id}   지표 상세
 //
 // 방문자 수 API(POST /api/visits, GET /api/visits/summary)는 visits.go(VisitHandler)다.
@@ -35,14 +35,21 @@ type Point struct {
 	Value  float64 `json:"value"`
 }
 
+// Category는 지표의 구분이다.
+type Category struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
 // Card는 메인 화면 카드 하나다.
 type Card struct {
-	ID       string  `json:"id"`
-	Name     string  `json:"name"`
-	Cycle    string  `json:"cycle"`
-	Unit     *string `json:"unit"`
-	Decimals *int    `json:"decimals"`
-	Latest   *Point  `json:"latest"`
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`
+	Category Category `json:"category"`
+	Cycle    string   `json:"cycle"`
+	Unit     *string  `json:"unit"`
+	Decimals *int     `json:"decimals"`
+	Latest   *Point   `json:"latest"`
 }
 
 // CardList는 GET /api/indicators의 응답이다.
@@ -64,14 +71,15 @@ type Related struct {
 
 // Detail은 GET /api/indicators/{id}의 응답이다.
 type Detail struct {
-	ID       string  `json:"id"`
-	Name     string  `json:"name"`
-	Cycle    string  `json:"cycle"`
-	Unit     *string `json:"unit"`
-	Decimals *int    `json:"decimals"`
-	Notice   *string `json:"notice"`
-	Source   Source  `json:"source"`
-	StatCode string  `json:"stat_code"`
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`
+	Category Category `json:"category"`
+	Cycle    string   `json:"cycle"`
+	Unit     *string  `json:"unit"`
+	Decimals *int     `json:"decimals"`
+	Notice   *string  `json:"notice"`
+	Source   Source   `json:"source"`
+	StatCode string   `json:"stat_code"`
 	// LastCollectedAt은 Asia/Seoul 시각(RFC 3339)이다.
 	LastCollectedAt *string   `json:"last_collected_at"`
 	Latest          *Point    `json:"latest"`
@@ -98,7 +106,7 @@ func Handler(st Store, now func() time.Time, loc *time.Location) http.Handler {
 		out := CardList{Indicators: make([]Card, 0, len(cards))}
 		for _, c := range cards {
 			out.Indicators = append(out.Indicators, Card{
-				ID: c.ID, Name: c.Name, Cycle: c.Cycle, Unit: c.Unit, Decimals: c.Decimals, Latest: point(c.Latest),
+				ID: c.ID, Name: c.Name, Category: Category{Code: c.CategoryCode, Name: c.CategoryName}, Cycle: c.Cycle, Unit: c.Unit, Decimals: c.Decimals, Latest: point(c.Latest),
 			})
 		}
 		write(w, http.StatusOK, out)
@@ -114,7 +122,7 @@ func Handler(st Store, now func() time.Time, loc *time.Location) http.Handler {
 			return
 		}
 		out := Detail{
-			ID: d.ID, Name: d.Name, Cycle: d.Cycle, Unit: d.Unit, Decimals: d.Decimals, Notice: d.Notice,
+			ID: d.ID, Name: d.Name, Category: Category{Code: d.CategoryCode, Name: d.CategoryName}, Cycle: d.Cycle, Unit: d.Unit, Decimals: d.Decimals, Notice: d.Notice,
 			Source:      Source{Code: d.SourceCode, Name: d.SourceName},
 			StatCode:    d.StatCode,
 			Latest:      point(d.Latest),

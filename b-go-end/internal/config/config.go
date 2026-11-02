@@ -252,6 +252,8 @@ type Indicator struct {
 	ValueField string `yaml:"value_field"`
 	// Cycle은 D/M/Q/A다. 연은 A이고, KOSIS에 요청할 때만 Y로 바꾼다(KEDP001-D022 3).
 	Cycle string `yaml:"cycle"`
+	// Category는 구분 code다(category.code, b-sql-db/migrations/0004_category.up.sql).
+	Category string `yaml:"category"`
 }
 
 // Display는 지표 하나의 화면 처음 값이다. DB indicator_display 테이블의 칼럼과 같다.
