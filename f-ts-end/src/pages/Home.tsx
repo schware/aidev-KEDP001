@@ -1,10 +1,14 @@
 import { Link } from 'react-router'
 import { cardsPath, type Card, type CardList } from '../api.ts'
+import { groupByCategory } from '../category.ts'
 import { Message } from '../components/Layout.tsx'
 import { formatPeriod, formatValue } from '../format.ts'
 import { useApi } from '../useApi.ts'
 
-/** 메인 화면: 노출된 지표 카드를 API가 준 순서대로 보여준다(50.web 2장). */
+/**
+ * 메인 화면: 노출된 지표 카드를 구분별로 묶어 보여준다(50.web 2장).
+ * 구분 이름 아래에 그 구분의 카드를 놓는다. 순서는 API가 준 순서(구분 순서 → 노출 순서) 그대로다.
+ */
 export function Home() {
   const state = useApi<CardList>(cardsPath)
 
@@ -20,13 +24,22 @@ export function Home() {
         (state.data.indicators.length === 0 ? (
           <Message>보여줄 지표가 없습니다.</Message>
         ) : (
-          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {state.data.indicators.map((c) => (
-              <li key={c.id}>
-                <IndicatorCard card={c} />
-              </li>
+          <div className="space-y-8">
+            {groupByCategory(state.data.indicators).map(({ category, cards }) => (
+              <section key={category.code} aria-labelledby={`category-${category.code}`}>
+                <h2 id={`category-${category.code}`} className="mb-3 border-b border-slate-200 pb-1 font-semibold text-slate-700">
+                  {category.name}
+                </h2>
+                <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {cards.map((c) => (
+                    <li key={c.id}>
+                      <IndicatorCard card={c} />
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
         ))}
     </>
   )
@@ -38,7 +51,7 @@ function IndicatorCard({ card }: { card: Card }) {
       to={`/indicator/${encodeURIComponent(card.id)}`}
       className="flex h-full flex-col rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-400 hover:shadow focus-visible:outline-2 focus-visible:outline-blue-500"
     >
-      <h2 className="font-medium text-slate-700">{card.name}</h2>
+      <h3 className="font-medium text-slate-700">{card.name}</h3>
       {card.latest ? (
         <>
           <p className="mt-2 break-all">

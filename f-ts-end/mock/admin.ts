@@ -4,7 +4,7 @@
 import { randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { AdminIndicator, SourceInfo } from '../src/admin/api.ts'
-import { fakes, sorted, type Fake } from './data.ts'
+import { categories, fakes, sorted, type Fake } from './data.ts'
 import { adminVisits, resetVisits, setVisitBase } from './visits.ts'
 
 type Send = (res: ServerResponse, status: number, body?: unknown) => true
@@ -52,7 +52,7 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
 }
 
 type Body = Record<string, unknown>
-const editKeys = ['name', 'cycle', 'unit', 'chart_period', 'decimals', 'notice', 'related']
+const editKeys = ['name', 'category', 'cycle', 'unit', 'chart_period', 'decimals', 'notice', 'related']
 const addKeys = [...editKeys, 'id', 'source', 'stat_code', 'item_code', 'classes', 'org_id', 'value_field', 'visible']
 const isStr = (v: unknown): v is string => typeof v === 'string'
 const nonEmpty = (v: unknown) => isStr(v) && v.trim() !== ''
@@ -64,6 +64,11 @@ function validate(b: Body, keys: string[], selfId: string, required: string[]): 
   for (const k of Object.keys(b)) if (!keys.includes(k)) e[k] = 'unknown field'
   for (const k of required) if (b[k] === undefined) e[k] = 'required'
   if ('name' in b && !nonEmpty(b.name)) e.name = 'must not be empty'
+  if (b.category !== undefined) {
+    const c = b.category
+    if (!nonEmpty(c)) e.category = 'required'
+    else if (!categories.some((x) => x.code === (c as string).trim())) e.category = `category ${JSON.stringify(c)} does not exist`
+  }
   if ('cycle' in b && !['D', 'M', 'Q', 'A'].includes(b.cycle as string)) e.cycle = 'must be one of D, M, Q, A'
   if ('chart_period' in b && !(isStr(b.chart_period) && /^[1-9]\d{0,3} (years|months|days)$/.test(b.chart_period)))
     e.chart_period = 'must be N years, N months or N days (N 1-9999)'
@@ -81,7 +86,7 @@ function validate(b: Body, keys: string[], selfId: string, required: string[]): 
 }
 
 function validateAdd(b: Body): Record<string, string> {
-  const e = validate(b, addKeys, String(b.id), ['id', 'name', 'source', 'stat_code', 'cycle', 'chart_period'])
+  const e = validate(b, addKeys, String(b.id), ['id', 'name', 'category', 'source', 'stat_code', 'cycle', 'chart_period'])
   if ('id' in b && !(isStr(b.id) && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(b.id))) e.id = 'must be lowercase letters and digits joined by -'
   if ('source' in b && !['ecos', 'kosis', 'data-go-kr'].includes(b.source as string)) e.source = 'must be one of ecos, kosis, data-go-kr'
   if ('stat_code' in b && !nonEmpty(b.stat_code)) e.stat_code = 'must not be empty'
@@ -99,6 +104,7 @@ const nextOrder = () => Math.max(0, ...fakes.map((f) => f.order ?? 0)) + 1
 
 function applyEdit(f: Fake, b: Body) {
   f.name = (b.name as string).trim()
+  f.category = (b.category as string).trim()
   f.cycle = b.cycle as Fake['cycle']
   f.unit = strOrNull(b.unit)
   f.chart_period = b.chart_period as string
@@ -176,6 +182,7 @@ export async function handleAdmin(req: IncomingMessage, res: ServerResponse, pat
     const f: Fake = {
       id: body.id as string,
       name: '',
+      category: '',
       source: body.source as Fake['source'],
       stat_code: (body.stat_code as string).trim(),
       item_code: strOrNull(body.item_code),
@@ -203,10 +210,14 @@ export async function handleAdmin(req: IncomingMessage, res: ServerResponse, pat
     const f = fakes.find((x) => x.id === decodeURIComponent(m[1]))
     if (!f) return send(res, 404, { error: 'indicator not found' })
     if (!isObj(body)) return send(res, 400, { error: 'invalid JSON' })
-    const e = validate(body, editKeys, f.id, ['name', 'cycle', 'chart_period', 'related'])
+    const e = validate(body, editKeys, f.id, ['name', 'category', 'cycle', 'chart_period', 'related'])
     if (Object.keys(e).length > 0) return send(res, 400, { error: 'invalid input', fields: e })
     applyEdit(f, body)
     return send(res, 200, toAdmin(f))
+  }
+  if (route === '/categories') {
+    if (method !== 'GET') return notAllowed('GET')
+    return send(res, 200, { categories })
   }
   if (route === '/display-order') {
     if (method !== 'PUT') return notAllowed('PUT')

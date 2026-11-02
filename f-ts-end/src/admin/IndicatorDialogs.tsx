@@ -1,7 +1,7 @@
 // Dashboard 관리의 [편집]과 [지표 추가] 창(50.web 5장, 40.api 5.5, 5.6).
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { ApiError } from '../api.ts'
-import { adminRequest, indicatorPath, indicatorsPath, type AdminIndicator } from './api.ts'
+import { adminRequest, indicatorPath, indicatorsPath, type AdminCategory, type AdminIndicator } from './api.ts'
 import { useAdminAuth } from './auth.ts'
 import { periodUnits, type PeriodUnit } from './chartPeriod.ts'
 import {
@@ -21,7 +21,7 @@ import {
 } from './form.ts'
 import { buttonClass, Field, FormErrors, inputClass, primaryButtonClass } from './ui.tsx'
 
-const settingsKeys = ['name', 'cycle', 'unit', 'chart_period', 'decimals', 'notice', 'related']
+const settingsKeys = ['name', 'category', 'cycle', 'unit', 'chart_period', 'decimals', 'notice', 'related']
 const addKeys = [...settingsKeys, 'id', 'source', 'stat_code', 'item_code', 'org_id', 'classes', 'value_field', 'visible']
 
 /** 저장 요청의 오류를 칸 오류나 일반 오류로 바꾼다. 401/403은 useAdminAuth가 처리한다. */
@@ -41,15 +41,17 @@ function useSaveError() {
   }
 }
 
-/** [편집]: 이름, 주기, 단위, 차트 기간, 소수 자릿수, 안내 문구, 관련 지표를 바꾼다. id, 제공처, 코드는 보기만 한다. */
+/** [편집]: 이름, 구분, 주기, 단위, 차트 기간, 소수 자릿수, 안내 문구, 관련 지표를 바꾼다. id, 제공처, 코드는 보기만 한다. */
 export function EditDialog({
   indicator,
   all,
+  categories,
   onClose,
   onSaved,
 }: {
   indicator: AdminIndicator
   all: AdminIndicator[]
+  categories: AdminCategory[]
   onClose: () => void
   onSaved: (updated: AdminIndicator) => void
 }) {
@@ -106,6 +108,7 @@ export function EditDialog({
           onChange={(p) => setForm((f) => ({ ...f, ...p }))}
           errors={errors}
           all={all}
+          categories={categories}
           selfId={indicator.id}
           sourceUnit={indicator.source_unit}
         />
@@ -119,10 +122,12 @@ export function EditDialog({
 /** [지표 추가]: 제공처를 고르면 그 제공처에 필요한 칸만 보인다. */
 export function AddDialog({
   all,
+  categories,
   onClose,
   onAdded,
 }: {
   all: AdminIndicator[]
+  categories: AdminCategory[]
   onClose: () => void
   onAdded: (added: AdminIndicator) => void
 }) {
@@ -181,7 +186,15 @@ export function AddDialog({
         <Field label="id" error={errors.id} hint="영문 소문자와 숫자를 -로 잇는다(예: kosis-kospi). 나중에 바꿀 수 없다">
           <input className={inputClass} value={form.id} onChange={(e) => set({ id: e.target.value })} />
         </Field>
-        <SettingsFields form={form} onChange={set} errors={errors} all={all} selfId={form.id.trim()} sourceUnit={null} />
+        <SettingsFields
+          form={form}
+          onChange={set}
+          errors={errors}
+          all={all}
+          categories={categories}
+          selfId={form.id.trim()}
+          sourceUnit={null}
+        />
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={form.visible} onChange={(e) => set({ visible: e.target.checked })} />
           메인 화면에 보이기(순서는 맨 뒤)
@@ -199,6 +212,7 @@ function SettingsFields({
   onChange,
   errors,
   all,
+  categories,
   selfId,
   sourceUnit,
 }: {
@@ -206,6 +220,7 @@ function SettingsFields({
   onChange: (p: Partial<SettingsForm>) => void
   errors: FieldErrors
   all: AdminIndicator[]
+  categories: AdminCategory[]
   selfId: string
   sourceUnit: string | null
 }) {
@@ -215,6 +230,16 @@ function SettingsFields({
         <input className={inputClass} value={form.name} onChange={(e) => onChange({ name: e.target.value })} />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="구분" error={errors.category} hint="메인 화면에서 이 구분 아래에 보인다">
+          <select className={inputClass} value={form.category} onChange={(e) => onChange({ category: e.target.value })}>
+            <option value="">구분 고르기</option>
+            {categories.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field label="주기" error={errors.cycle}>
           <select
             className={inputClass}

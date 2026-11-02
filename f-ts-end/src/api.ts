@@ -8,10 +8,17 @@ export interface Point {
   value: number
 }
 
+/** 지표 구분(40.api 2장, 5.11). code는 예: money, name은 화면 이름(예: 금리·통화). */
+export interface Category {
+  code: string
+  name: string
+}
+
 /** GET /api/indicators의 카드 하나(40.api 2장). */
 export interface Card {
   id: string
   name: string
+  category: Category
   cycle: Cycle
   unit: string | null
   /** 소수 자릿수 0~4. null이면 받은 값 그대로 보여준다(40.api 1.1). */
@@ -27,6 +34,7 @@ export interface CardList {
 export interface Detail {
   id: string
   name: string
+  category: Category
   cycle: Cycle
   unit: string | null
   decimals: number | null

@@ -4,10 +4,13 @@ import { ApiError } from '../api.ts'
 import { formatCycle } from '../format.ts'
 import {
   adminRequest,
+  categoriesPath,
   displayOrderPath,
   indicatorsPath,
+  type AdminCategory,
   type AdminIndicator,
   type AdminIndicatorList,
+  type CategoryList,
   type DisplayOrderRequest,
 } from './api.ts'
 import { useAdminAuth } from './auth.ts'
@@ -16,9 +19,20 @@ import { AddDialog, EditDialog } from './IndicatorDialogs.tsx'
 import { buttonClass, FormErrors, primaryButtonClass } from './ui.tsx'
 import { useAdminGet } from './useAdminGet.ts'
 
-/** Dashboard 관리(/admin/dashboard, 50.web 5장). */
+/** Dashboard 관리(/admin/dashboard, 50.web 5장). 지표 목록과 구분 목록(추가·편집의 구분 선택)을 읽는다. */
 export function DashboardPage() {
-  const [state, reload] = useAdminGet<AdminIndicatorList>(indicatorsPath)
+  const [indicators, reloadIndicators] = useAdminGet<AdminIndicatorList>(indicatorsPath)
+  const [categories, reloadCategories] = useAdminGet<CategoryList>(categoriesPath)
+  const state =
+    indicators.status === 'error' || categories.status === 'error'
+      ? { status: 'error' as const }
+      : indicators.status === 'ok' && categories.status === 'ok'
+        ? { status: 'ok' as const, indicators: indicators.data.indicators, categories: categories.data.categories }
+        : { status: 'loading' as const }
+  const reload = () => {
+    if (indicators.status === 'error') reloadIndicators()
+    if (categories.status === 'error') reloadCategories()
+  }
   return (
     <>
       <title>Dashboard 관리 - KEDP</title>
@@ -32,7 +46,7 @@ export function DashboardPage() {
           </button>
         </div>
       )}
-      {state.status === 'ok' && <Editor initial={state.data.indicators} />}
+      {state.status === 'ok' && <Editor initial={state.indicators} categories={state.categories} />}
     </>
   )
 }
@@ -51,7 +65,7 @@ function sameDraft(a: Draft, b: Draft): boolean {
   return a.length === b.length && a.every((x, i) => x.id === b[i].id && x.visible === b[i].visible)
 }
 
-function Editor({ initial }: { initial: AdminIndicator[] }) {
+function Editor({ initial, categories }: { initial: AdminIndicator[]; categories: AdminCategory[] }) {
   const { handleAuthError } = useAdminAuth()
   const [items, setItems] = useState(initial)
   // saved: 서버에 저장된 노출과 순서, draft: 화면에서 바꾸는 중인 것. 둘이 다르면 저장하지 않은 변경이다.
@@ -66,6 +80,7 @@ function Editor({ initial }: { initial: AdminIndicator[] }) {
 
   const dirty = !sameDraft(draft, saved)
   const byId = new Map(items.map((x) => [x.id, x]))
+  const categoryName = (code: string) => categories.find((c) => c.code === code)?.name ?? code
   const unconfigured = items.filter((x) => x.order === null)
 
   function move(i: number, d: -1 | 1) {
@@ -135,6 +150,7 @@ function Editor({ initial }: { initial: AdminIndicator[] }) {
               <th className="px-3 py-2 font-medium">순서</th>
               <th className="px-3 py-2 font-medium">노출</th>
               <th className="px-3 py-2 font-medium">지표명</th>
+              <th className="px-3 py-2 font-medium">구분</th>
               <th className="px-3 py-2 font-medium">주기</th>
               <th className="px-3 py-2 font-medium">차트 기간</th>
               <th className="px-3 py-2 font-medium">설정</th>
@@ -180,7 +196,7 @@ function Editor({ initial }: { initial: AdminIndicator[] }) {
                       {d.visible ? 'ON' : 'OFF'}
                     </button>
                   </td>
-                  <IndicatorCells ind={ind} onEdit={() => setEditing(ind)} />
+                  <IndicatorCells ind={ind} category={categoryName(ind.category)} onEdit={() => setEditing(ind)} />
                 </tr>
               )
             })}
@@ -188,7 +204,7 @@ function Editor({ initial }: { initial: AdminIndicator[] }) {
               <tr key={ind.id} className="border-t border-slate-100 text-slate-500">
                 <td className="px-3 py-2">-</td>
                 <td className="px-3 py-2 text-xs">화면 설정 없음</td>
-                <IndicatorCells ind={ind} onEdit={() => setEditing(ind)} />
+                <IndicatorCells ind={ind} category={categoryName(ind.category)} onEdit={() => setEditing(ind)} />
               </tr>
             ))}
           </tbody>
@@ -217,6 +233,7 @@ function Editor({ initial }: { initial: AdminIndicator[] }) {
         <EditDialog
           indicator={editing}
           all={items}
+          categories={categories}
           onClose={() => setEditing(null)}
           onSaved={(updated) => {
             setItems((cur) => cur.map((x) => (x.id === updated.id ? updated : x)))
@@ -229,6 +246,7 @@ function Editor({ initial }: { initial: AdminIndicator[] }) {
       {adding && (
         <AddDialog
           all={items}
+          categories={categories}
           onClose={() => setAdding(false)}
           onAdded={(added) => {
             setItems((cur) => [...cur, added])
@@ -242,13 +260,14 @@ function Editor({ initial }: { initial: AdminIndicator[] }) {
   )
 }
 
-function IndicatorCells({ ind, onEdit }: { ind: AdminIndicator; onEdit: () => void }) {
+function IndicatorCells({ ind, category, onEdit }: { ind: AdminIndicator; category: string; onEdit: () => void }) {
   return (
     <>
       <td className="px-3 py-2">
         <span className="font-medium text-slate-800">{ind.name}</span>
         <span className="block text-xs text-slate-400">{ind.id}</span>
       </td>
+      <td className="whitespace-nowrap px-3 py-2">{category}</td>
       <td className="whitespace-nowrap px-3 py-2" title={formatCycle(ind.cycle)}>
         {ind.cycle}
       </td>

@@ -51,6 +51,8 @@ export function sourceFields(source: SourceCode): { field: CodeField; label: str
 /** 화면 설정 칸(편집과 추가에 같이 쓴다). 숫자와 선택값도 입력칸 그대로 글로 둔다. */
 export interface SettingsForm {
   name: string
+  /** 구분 code. '' = 아직 고르지 않음(꼭 고른다) */
+  category: string
   cycle: Cycle
   unit: string
   periodN: string
@@ -76,6 +78,7 @@ export function emptyAddForm(): AddForm {
   return {
     id: '',
     name: '',
+    category: '',
     source: 'ecos',
     stat_code: '',
     item_code: '',
@@ -98,6 +101,7 @@ export function settingsFromIndicator(ind: AdminIndicator): SettingsForm {
   const p = parseChartPeriod(ind.chart_period)
   return {
     name: ind.name,
+    category: ind.category,
     cycle: ind.cycle,
     unit: ind.unit ?? '',
     periodN: p ? String(p.n) : '',
@@ -119,6 +123,7 @@ const orNull = (s: string) => (blank(s) ? null : s.trim())
 function validateSettings(f: SettingsForm, selfId: string): FieldErrors {
   const e: FieldErrors = {}
   if (blank(f.name)) e.name = '이름을 넣어 주세요'
+  if (f.category === '') e.category = '구분을 골라 주세요'
   const pe = chartPeriodNumberError(f.periodN)
   if (pe) e.chart_period = pe
   if (f.decimals !== '' && !/^[0-4]$/.test(f.decimals)) e.decimals = '없음 또는 0~4 중에서 골라 주세요'
@@ -151,6 +156,7 @@ export function validateAdd(f: AddForm, existingIds: string[]): FieldErrors {
 function settingsBody(f: SettingsForm): EditRequest {
   return {
     name: f.name.trim(),
+    category: f.category,
     cycle: f.cycle,
     unit: orNull(f.unit),
     chart_period: formatChartPeriod({ n: Number(f.periodN.trim()), unit: f.periodUnit }),

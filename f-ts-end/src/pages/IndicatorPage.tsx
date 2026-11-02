@@ -85,6 +85,8 @@ function DetailView({ d }: { d: Detail }) {
 
       <Section title="지표 정보">
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
+          <dt className="text-slate-500">구분</dt>
+          <dd>{d.category.name}</dd>
           <dt className="text-slate-500">출처</dt>
           <dd>{d.source.name}</dd>
           <dt className="text-slate-500">통계 코드</dt>

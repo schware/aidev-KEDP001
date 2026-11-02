@@ -14,7 +14,7 @@ import {
   type AddForm,
 } from './form.ts'
 
-const base: AddForm = { ...emptyAddForm(), id: 'new-one', name: '새 지표' }
+const base: AddForm = { ...emptyAddForm(), id: 'new-one', name: '새 지표', category: 'market' }
 const fieldsOf = (s: AddForm['source']) => sourceFields(s).map((x) => x.field)
 
 describe('sourceFields', () => {
@@ -62,6 +62,11 @@ describe('validateAdd 공통 칸', () => {
     expect(validateAdd({ ...ok, id: 'kosis-kospi2' }, ['kosis-kospi'])).toEqual({})
   })
 
+  it('구분은 꼭 고른다(처음 칸은 비어 있다)', () => {
+    expect(emptyAddForm().category).toBe('')
+    expect(validateAdd({ ...ok, category: '' }, [])).toEqual({ category: '구분을 골라 주세요' })
+  })
+
   it('이름, 차트 기간, 소수 자릿수', () => {
     const e = validateAdd({ ...ok, name: '  ', periodN: '0', decimals: '5' }, [])
     expect(Object.keys(e).sort()).toEqual(['chart_period', 'decimals', 'name'])
@@ -98,6 +103,7 @@ describe('addBody', () => {
       value_field: 'clpr',
       visible: false,
       name: '새 지표',
+      category: 'market',
       cycle: 'M',
       unit: null,
       chart_period: '1 years',
@@ -119,6 +125,7 @@ describe('편집', () => {
   const ind: AdminIndicator = {
     id: 'ecos-base-rate',
     name: '한국은행 기준금리',
+    category: 'money',
     source: 'ecos',
     stat_code: '722Y001',
     item_code: '0101000',
@@ -141,6 +148,7 @@ describe('편집', () => {
     expect(validateEdit(f, ind.id)).toEqual({})
     expect(editBody(f)).toEqual({
       name: '한국은행 기준금리',
+      category: 'money',
       cycle: 'M',
       unit: null,
       chart_period: '10 years',
@@ -148,6 +156,11 @@ describe('편집', () => {
       notice: null,
       related: ['kosis-employment-rate'],
     })
+  })
+
+  it('구분을 바꿔 보낸다. 비우면 저장하지 않는다', () => {
+    expect(editBody({ ...settingsFromIndicator(ind), category: 'price' }).category).toBe('price')
+    expect(validateEdit({ ...settingsFromIndicator(ind), category: '' }, ind.id).category).toBeDefined()
   })
 
   it('소수 자릿수 0도 보낸다', () => {
