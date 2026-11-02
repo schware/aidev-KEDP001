@@ -96,6 +96,7 @@ CARGO_BUILD_JOBS=2 cargo test
 - 응답 행이 지표 정의와 같은 계열인지 확인한다. 다르면 `INVALID_RESPONSE`다.
   - ECOS: `STAT_CODE`, `ITEM_CODE1`, 분류(`ITEM_CODE2`…)
   - KOSIS: `ORG_ID`, `TBL_ID`, `ITM_ID`, 분류(`C1`…), 주기(`PRD_SE`)
+    - 분류 값이 `ALL`인 자리는 응답에 그 칸이 없어야 하고 대조하지 않는다(분류가 첫째 자리가 아닌 표, 예: 설비투자지수 `DT_1F70011`의 `ALL`, `C`). `ALL` 자리에 칸이 있으면 `INVALID_RESPONSE`다.
   - 공공데이터포털: `srtnCd`
 - 빈 값은 `null`과 빈 문자열(공백만 있는 것 포함)이다. 결측 표기를 샘플로 확인하지 못했으므로(설계서 5.5) `"-"` 같은 다른 표기는 숫자가 아니어서 `INVALID_RESPONSE`가 된다.
 - 값은 10진수(`3.5`, `61`, `.25`, `-.39`)만 받는다. 지수, 쉼표, `NaN`은 받지 않는다. `value_raw`에는 응답 문자열을 그대로 넣는다.

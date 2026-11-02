@@ -473,6 +473,48 @@ mod tests {
     }
 
     #[test]
+    fn kosis_all_class() {
+        // 설비투자지수: 분류 B가 둘째 자리라 objL1=ALL, objL2=C로 부른다. 응답 행에 C1이 없다(#60).
+        let facility = |classes: &[&str]| {
+            indicator(Source::Kosis, "DT_1F70011", Some("T5"), classes, Cycle::M)
+        };
+        let body = sample("kosis/DT_1F70011-T5-ALL-C-M-202401-202609.json");
+        let (rows, _) = success(read(&facility(&["ALL", "C"]), 200, &body));
+        check_rows(
+            &rows,
+            33,
+            (ymd(2024, 1, 1), "202401", "103"),
+            (ymd(2026, 9, 1), "202609", "137"),
+        );
+        // ALL 없이 C만 적으면 C1을 찾다가 실패한다(지금과 같다).
+        assert_eq!(
+            error_code(read(&facility(&["C"]), 200, &body)),
+            INVALID_RESPONSE
+        );
+        // 둘째 자리 C2가 다르면 실패한다.
+        assert_eq!(
+            error_code(read(&facility(&["ALL", "C1"]), 200, &body)),
+            INVALID_RESPONSE
+        );
+        // ALL 자리에 칸(C1)이 있는 응답은 실패한다.
+        let employment = indicator(
+            Source::Kosis,
+            "DT_1DA7001S",
+            Some("T90"),
+            &["ALL"],
+            Cycle::M,
+        );
+        let body = sample("kosis/DT_1DA7001S-T90-0-M-202401-202609.json");
+        match read(&employment, 200, &body) {
+            Reading::Error { code, message } => {
+                assert_eq!(code, INVALID_RESPONSE);
+                assert!(message.contains("C1 is present"), "{message}");
+            }
+            other => panic!("not error: {other:?}"),
+        }
+    }
+
+    #[test]
     fn rejects_response_of_other_indicator() {
         let body = sample("ecos/722Y001-0101000-M-202401-202609.json");
         let other_item = indicator(Source::Ecos, "722Y001", Some("0102000"), &[], Cycle::M);
