@@ -200,7 +200,12 @@ KEDP_DB_NAME=<시험 DB> ECOS_API_KEY=fake KOSIS_API_KEY=fake DATA_GO_KR_API_KEY
 ```
 
 - `-source-host`를 주면 요청 주소의 scheme과 host만 바꿔 보낸다. 경로와 질의는 그대로다.
-- `fakesource`는 요청의 통계 코드(ECOS는 주기도)로 `../samples/<제공처>/`의 샘플을 고른다. 요청 기간은 보지 않는다. 맞는 샘플이 없으면 404를 돌려준다(Rust 결과 `HTTP_404`).
+- `fakesource`는 요청 값으로 `../samples/<제공처>/`의 샘플을 고른다. 파일 이름 규칙(`source.Request.SampleName`)과 같다. 요청 기간은 보지 않는다(여럿이면 이름순 첫 파일).
+  - ECOS: `{통계 코드}-{ITEM_CODE1}[-{ITEM_CODE2}…]-{주기}-*.json`
+  - KOSIS: `{tblId}-{itmId}[-{objL1}-{objL2}…]-{prdSe}-*.json` (연 주기는 요청 값 `Y`다)
+  - 공공데이터포털: `{종목 코드}-*.json`
+- 맞는 샘플이 없으면 404를 돌려준다(Rust 결과 `HTTP_404`). 통계 코드만 맞는 다른 파일로 대신 보내지 않는다.
+- 코드 값은 영문, 숫자, `_`만 받는다. 그 밖의 글자(예: 분류 코드의 `.`, 항목 코드의 `*`)가 있는 요청은 404다. 지금 지표 중 미분양 주택(`DT_MLTM_2080`, 분류 `13102792722A.0001` 등)이 이렇다.
 - Rust 서버도 같은 `KEDP_DB_NAME`으로 띄운다.
 
 ## 샘플 수집 도구 (`cmd/sample`)
