@@ -36,7 +36,7 @@ go run ./cmd/server -indicator kosis-total-population -start 2015 -end 2025
 | `DT_1F02001-T20-00-C-M-202401-202609.json` | `kosis-manufacturing-production-sa` 제조업생산지수(계절조정) | 33 | `apiKey=***&endPrdDe=202609&format=json&itmId=T20&jsonVD=Y&method=getList&objL1=00&objL2=C&orgId=101&prdSe=M&startPrdDe=202401&tblId=DT_1F02001` |
 | `DT_1KC2020-T3-T-M-202401-202609.json` | `kosis-service-production-sa` 서비스업생산지수(계절조정) | 33 | `apiKey=***&endPrdDe=202609&format=json&itmId=T3&jsonVD=Y&method=getList&objL1=T&orgId=101&prdSe=M&startPrdDe=202401&tblId=DT_1KC2020` |
 | `DT_1K41012-T3-G0-M-202401-202609.json` | `kosis-retail-sales-sa` 소매판매액지수(계절조정) | 33 | `apiKey=***&endPrdDe=202609&format=json&itmId=T3&jsonVD=Y&method=getList&objL1=G0&orgId=101&prdSe=M&startPrdDe=202401&tblId=DT_1K41012` |
-| `DT_1F70011-T5-ALL-C-M-202401-202609.json` | `kosis-facility-investment-sa` 설비투자지수(계절조정) (pending) | 33 | `apiKey=***&endPrdDe=202609&format=json&itmId=T5&jsonVD=Y&method=getList&objL1=ALL&objL2=C&orgId=101&prdSe=M&startPrdDe=202401&tblId=DT_1F70011` |
+| `DT_1F70011-T5-ALL-C-M-202401-202609.json` | `kosis-facility-investment-sa` 설비투자지수(계절조정) | 33 | `apiKey=***&endPrdDe=202609&format=json&itmId=T5&jsonVD=Y&method=getList&objL1=ALL&objL2=C&orgId=101&prdSe=M&startPrdDe=202401&tblId=DT_1F70011` |
 | `DT_1J22042-T03-0-M-202401-202609.json` | `kosis-cpi-yoy` 소비자물가지수 전년 동월 대비 | 33 | `apiKey=***&endPrdDe=202609&format=json&itmId=T03&jsonVD=Y&method=getList&objL1=0&orgId=101&prdSe=M&startPrdDe=202401&tblId=DT_1J22042` |
 | `DT_1J22042-T03-1-M-202401-202609.json` | `kosis-living-cpi-yoy` 생활물가지수 전년 동월 대비 | 33 | `apiKey=***&endPrdDe=202609&format=json&itmId=T03&jsonVD=Y&method=getList&objL1=1&orgId=101&prdSe=M&startPrdDe=202401&tblId=DT_1J22042` |
 | `DT_1J22042-T03-2-M-202401-202609.json` | `kosis-fresh-food-cpi-yoy` 신선식품지수 전년 동월 대비 | 33 | `apiKey=***&endPrdDe=202609&format=json&itmId=T03&jsonVD=Y&method=getList&objL1=2&orgId=101&prdSe=M&startPrdDe=202401&tblId=DT_1J22042` |
@@ -53,7 +53,7 @@ go run ./cmd/server -indicator kosis-total-population -start 2015 -end 2025
 | `DT_134001_001-T005-DATA-M-202401-202610.json` | `kosis-trade-balance` 무역수지 | 33 | `apiKey=***&endPrdDe=202610&format=json&itmId=T005&jsonVD=Y&method=getList&objL1=DATA&orgId=134&prdSe=M&startPrdDe=202401&tblId=DT_134001_001` |
 | `DT_MLTM_2080-13103792722T1-13102792722A.0001-13102792722B.0001-13102792722C.0001-M-202401-202609.json` | `kosis-unsold-housing` 미분양 주택 | 32 | `apiKey=***&endPrdDe=202609&format=json&itmId=13103792722T1&jsonVD=Y&method=getList&objL1=13102792722A.0001&objL2=13102792722B.0001&objL3=13102792722C.0001&orgId=116&prdSe=M&startPrdDe=202401&tblId=DT_MLTM_2080` |
 
-- `DT_1F70011`(설비투자지수)은 분류 B가 둘째 자리라 `objL1=ALL&objL2=C`로 불러야 한다. 응답 행에 `C1`이 없어 지금 수집기(Rust)가 읽지 못한다.
+- `DT_1F70011`(설비투자지수)은 분류 B가 둘째 자리라 `objL1=ALL&objL2=C`로 불러야 한다. 응답 행에 `C1`이 없다. Rust는 분류 `ALL` 자리를 대조하지 않는다(#60).
 - 고용노동부(`DT_118N_…`, orgId 118), 관세청(`DT_134001_001`, orgId 134), 국토교통부(`DT_MLTM_2080`, orgId 116) 표는 `-org`로 받았다. 파일 이름은 수집기 규칙대로 기관 코드를 붙이지 않았다(조사 샘플은 `기관코드-`가 붙어 있다).
 - `DT_1J22042`(소비자물가 등락률)와 `DT_1BPA002`(주요 인구지표)는 `UNIT_NM`이 없다.
 
