@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +11,7 @@ import (
 	"time"
 
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/fetch"
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/source/kosis"
 )
 
 const key = "abc+/=KEY"
@@ -27,6 +30,11 @@ func TestNormalize(t *testing.T) {
 		{Request{Source: "kosis", API: "meta", Stat: "DT_1DA7001S", MetaType: "ITM"}, apiMeta, "DT_1DA7001S-meta-ITM.json"},
 		{Request{Source: "data-go-kr", Stat: "069500", Start: "20260901", End: "20261022"}, apiPrice, "069500-D-20260901-20261022.json"},
 		{Request{Source: "ecos", API: "items", Stat: "722Y001", Name: "my-items"}, apiItems, "my-items.json"},
+		// 기관 코드를 넣으면 파일 이름 앞에 붙는다.
+		{Request{Source: "kosis", Org: "118", Stat: "DT_118N_X", Item: "T1", Classes: []string{"0"}, Cycle: "M", Start: "202401", End: "202403"},
+			apiData, "118-DT_118N_X-T1-0-M-202401-202403.json"},
+		{Request{Source: "kosis", Org: "408", API: "meta", Stat: "DT_408_X", MetaType: "ITM"}, apiMeta, "408-DT_408_X-meta-ITM.json"},
+		{Request{Source: "kosis", Org: "118", API: "meta", Stat: "DT_118N_X", MetaType: "TBL", Name: "wage"}, apiMeta, "wage.json"},
 	}
 	for _, c := range cases {
 		r := c.req
@@ -52,11 +60,66 @@ func TestNormalizeErrors(t *testing.T) {
 		"date":    {Source: "data-go-kr", Stat: "069500"},
 		"folder":  {Source: "ecos", API: "items", Stat: "x", Name: "../x"},
 		"hidden":  {Source: "ecos", API: "items", Stat: "x", Name: ".x"},
+		// 기관 코드는 KOSIS에만 쓴다.
+		"org ecos":       {Source: "ecos", API: "items", Stat: "722Y001", Org: "101"},
+		"org data-go-kr": {Source: "data-go-kr", Stat: "069500", Start: "20260901", End: "20261022", Org: "101"},
+		"org folder":     {Source: "kosis", API: "meta", Stat: "x", MetaType: "ITM", Org: "../1"},
 	}
 	for name, r := range cases {
 		if err := r.normalize(); err == nil {
 			t.Errorf("%s: want error", name)
 		}
+	}
+}
+
+// 기관 코드를 넣은 KOSIS 요청은 그 orgId로, 넣지 않은 요청은 101로 나간다(data, meta 모두).
+func TestFetchKOSISOrg(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.URL.Query().Get("method")+" "+r.URL.Query().Get("orgId"))
+		w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+	client := fetch.New(time.Second, key)
+	if err := client.SetHost(srv.URL); err != nil {
+		t.Fatal(err)
+	}
+	s := sources{kosis: kosis.New(key, client)}
+	for _, r := range []Request{
+		{Source: "kosis", Org: "118", Stat: "DT_118N_X", Item: "T1", Cycle: "M", Start: "202401", End: "202403"},
+		{Source: "kosis", Org: "118", API: "meta", Stat: "DT_118N_X", MetaType: "ITM"},
+		{Source: "kosis", Stat: "DT_1DA7001S", Item: "T90", Cycle: "M", Start: "202401", End: "202403"},
+		{Source: "kosis", API: "meta", Stat: "DT_1DA7001S", MetaType: "ITM"},
+	} {
+		if err := r.normalize(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.fetch(t.Context(), r); err != nil {
+			t.Fatalf("%+v: %v", r, err)
+		}
+	}
+	want := []string{"getList 118", "getMeta 118", "getList 101", "getMeta 101"}
+	if strings.Join(got, ", ") != strings.Join(want, ", ") {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// 목록 파일의 org 칸을 읽는다.
+func TestLoadListOrg(t *testing.T) {
+	reqs, err := loadList(writeFile(t, "requests:\n  - source: kosis\n    org: \"118\"\n    api: meta\n    stat: DT_118N_X\n    meta_type: ITM\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := prepare(reqs); err != nil || reqs[0].Org != "118" || reqs[0].Name != "118-DT_118N_X-meta-ITM.json" {
+		t.Errorf("reqs = %+v, err = %v", reqs, err)
+	}
+	// ECOS에 org를 넣으면 부르기 전에 멈춘다.
+	reqs, err = loadList(writeFile(t, "requests:\n  - source: ecos\n    org: \"101\"\n    api: items\n    stat: 722Y001\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := prepare(reqs); err == nil || !strings.Contains(err.Error(), "org is only for kosis") {
+		t.Errorf("org on ecos: err = %v", err)
 	}
 }
 

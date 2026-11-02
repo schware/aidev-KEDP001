@@ -2,6 +2,7 @@
 // 정상, 오류, 데이터 없음 응답을 모두 저장하고, 응답마다 요청 정보(키를 가린 주소, HTTP 상태, 받은 시각)를 옆에 저장한다.
 //
 //	go run ./cmd/sample -out ../samples/repository/check -source ecos -stat 722Y001 -item 0101000 -cycle M -start 202401 -end 202403
+//	go run ./cmd/sample -out ../samples/repository/check -source kosis -org 118 -api meta -stat DT_XXXX -meta-type ITM
 //	go run ./cmd/sample -out ../samples/repository/check -list requests.yaml
 package main
 
@@ -40,6 +41,7 @@ func main() {
 	flag.StringVar(&r.Start, "start", "", "조회 시작 기간")
 	flag.StringVar(&r.End, "end", "", "조회 끝 기간")
 	flag.StringVar(&r.MetaType, "meta-type", "", "KOSIS getMeta type (예: ITM, TBL, PRD)")
+	flag.StringVar(&r.Org, "org", "", "KOSIS 기관 코드 orgId (비우면 101 통계청). KOSIS에만 쓴다")
 	flag.StringVar(&r.Name, "name", "", "저장 파일 이름 (기본: 요청 값으로 만든다)")
 	flag.Parse()
 
@@ -82,7 +84,7 @@ func (s sources) fetch(ctx context.Context, r Request) ([]byte, error) {
 	case apiData:
 		return s.kosis.Fetch(ctx, r.sourceRequest())
 	case apiMeta:
-		return s.kosis.FetchMeta(ctx, r.Stat, r.MetaType)
+		return s.kosis.FetchMeta(ctx, r.Org, r.Stat, r.MetaType)
 	case apiPrice:
 		return s.dataGoKr.Fetch(ctx, r.sourceRequest())
 	}

@@ -219,8 +219,8 @@ KEDP_DB_NAME=<시험 DB> ECOS_API_KEY=fake KOSIS_API_KEY=fake DATA_GO_KR_API_KEY
 | --- | --- | --- | --- |
 | `ecos` | `search` (기본, StatisticSearch) | `-stat -item -cycle -start -end` | `통계코드-항목-분류…-주기-시작-끝.json` |
 | `ecos` | `items` (StatisticItemList) | `-stat` | `통계코드-items.json` |
-| `kosis` | `data` (기본, statisticsParameterData) | `-stat -item -cycle -start -end` | `tblId-itmId-objL…-주기-시작-끝.json` |
-| `kosis` | `meta` (getMeta) | `-stat -meta-type` | `tblId-meta-type.json` |
+| `kosis` | `data` (기본, statisticsParameterData) | `-stat -item -cycle -start -end` | `tblId-itmId-objL…-주기-시작-끝.json` (`-org`를 넣으면 앞에 `기관코드-`) |
+| `kosis` | `meta` (getMeta) | `-stat -meta-type` | `tblId-meta-type.json` (`-org`를 넣으면 앞에 `기관코드-`) |
 | `data-go-kr` | `price` (기본, getETFPriceInfo_V2) | `-stat -start -end` (YYYYMMDD) | `종목코드-D-시작-끝.json` |
 
 - `-stat`: ECOS 통계 코드, KOSIS `tblId`, 공공데이터포털 종목 코드
@@ -228,8 +228,8 @@ KEDP_DB_NAME=<시험 DB> ECOS_API_KEY=fake KOSIS_API_KEY=fake DATA_GO_KR_API_KEY
 - `-classes`: 쉼표로 나눈 분류 코드. KOSIS `objL1,objL2…`, ECOS `ITEM_CODE2,ITEM_CODE3…`
 - `-cycle`: 제공처 요청 값 그대로(ECOS `A/Q/M/D`, KOSIS `Y/Q/M`). 공공데이터포털은 넣지 않는다.
 - `-meta-type`: KOSIS getMeta `type` 값 그대로(예: `ITM`, `TBL`, `PRD`)
+- `-org`: KOSIS 기관 코드 `orgId`(영문·숫자). 비우면 `101`(통계청)이다. data와 meta 모두 쓴다. ECOS, 공공데이터포털에 넣으면 부르기 전에 멈춘다. 목록 파일에서는 `org` 칸이다.
 - `-name`: 저장 파일 이름(폴더 없이). `.json`이 없으면 붙인다.
-- KOSIS `orgId`는 `101`(통계청)로 고정이다.
 
 ### 예시: 요청 하나
 
@@ -243,6 +243,9 @@ go run ./cmd/sample -out ../samples/repository/check \
 
 # KOSIS 메타(항목·분류)
 go run ./cmd/sample -out ../samples/repository/check -source kosis -api meta -stat DT_1DA7001S -meta-type ITM
+
+# 다른 기관(통계청이 아닌 곳)의 KOSIS 표: -org로 기관 코드를 넣는다. 파일은 118-DT_XXXX-meta-TBL.json
+go run ./cmd/sample -out ../samples/repository/check -source kosis -org 118 -api meta -stat DT_XXXX -meta-type TBL
 ```
 
 저장 결과:
@@ -280,6 +283,11 @@ requests:
     api: meta
     stat: DT_1DA7001S
     meta_type: ITM
+  - source: kosis
+    org: "118"              # 다른 기관의 표(비우면 101)
+    api: meta
+    stat: DT_XXXX
+    meta_type: TBL
   - source: data-go-kr
     stat: "069500"
     start: "20261020"
