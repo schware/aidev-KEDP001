@@ -14,12 +14,14 @@ b-sql-db/
 │   ├── 0004_category.up.sql   지표 구분 category(9행), indicator.category_code, 지금 지표 7개의 구분, kedp_go 권한
 │   ├── 0004_category.down.sql
 │   ├── 0005_indicators_d024.up.sql   D024 추가 지표 29개(지표, 화면 설정, 구분)
-│   └── 0005_indicators_d024.down.sql 0005 지표를 지운다(관측값·이력 포함)
+│   ├── 0005_indicators_d024.down.sql 0005 지표를 지운다(관측값·이력 포함)
+│   ├── 0006_indicators_d024_org.up.sql   D024 추가 지표 2차 5개(통계청이 아닌 기관의 KOSIS 표)
+│   └── 0006_indicators_d024_org.down.sql 0006 지표를 지운다(관측값·이력 포함)
 └── checks/
     └── smoke.sql              권한, 기간 검사, 이력 트리거, 원본 주소 검사 확인 (시험 DB 전용)
 ```
 
-- 적용은 번호 순서(0001 → … → 0005), 되돌리기는 반대 순서(0005 → … → 0001)로 한다.
+- 적용은 번호 순서(0001 → … → 0006), 되돌리기는 반대 순서(0006 → … → 0001)로 한다.
 - 파일마다 `BEGIN`/`COMMIT`으로 감싸 있어 중간에 실패하면 그 파일 전체가 적용되지 않는다.
 - 접속 정보와 비밀번호는 저장소에 쓰지 않는다. 계정 비밀번호는 적용한 뒤 소유자가 정한다(아래 "비밀번호").
 - PostgreSQL 11 이상이 필요하다(`EXECUTE FUNCTION`). 개발 서버는 PostgreSQL 17이다.
@@ -50,6 +52,7 @@ $K < b-sql-db/migrations/0002_roles.up.sql
 $K < b-sql-db/migrations/0003_visits.up.sql
 $K < b-sql-db/migrations/0004_category.up.sql
 $K < b-sql-db/migrations/0005_indicators_d024.up.sql
+$K < b-sql-db/migrations/0006_indicators_d024_org.up.sql
 ```
 
 이미 적용한 번호는 건너뛰고 그다음 번호부터 적용한다(예: 0003까지 적용한 DB에는 0004만). 배포 서버(macpro-debian)는 `deploy/README.md` 7장 "DB migration이 생겼을 때"를 따른다.
@@ -88,6 +91,16 @@ $K -c "SELECT count(*), count(*) FILTER (WHERE d.is_visible) FROM indicator i JO
 - 넣은 지표는 다음 예약 수집(수집 시각) 때 차트 기간만큼 처음부터 받는다. 첫 수집 호출은 ECOS 15번, KOSIS 14번이다.
 - 되돌리기(`0005_indicators_d024.down.sql`)는 그 사이 수집된 관측값과 이력도 지운다. 원본 응답과 수집 기록은 남고 수집 기록의 지표 연결만 비워진다.
 
+### 0006 적용 전 확인
+
+`0006`은 D024 추가 지표 2차 5개를 넣는다(고용노동부 명목임금, 관세청 수출액·수입액·무역수지, 국토교통부 미분양 주택). `0005` 뒤에 적용한다. 같은 id가 이미 있으면 멈춘다. 결과가 0행이어야 한다.
+
+```sh
+$K -c "SELECT id, name FROM indicator WHERE id IN ('kosis-wage-nominal', 'kosis-exports', 'kosis-imports', 'kosis-trade-balance', 'kosis-unsold-housing') ORDER BY id"
+```
+
+적용 뒤 지표는 41개(지금 7 + 0005 29 + 0006 5)다. 첫 수집 호출은 KOSIS 5번이다.
+
 ## 확인
 
 ```sh
@@ -125,6 +138,7 @@ docker exec -it kedp-postgres psql -h 127.0.0.1 -U kedp_rust -d kedp -c 'select 
 
 ```sh
 P="docker exec -i kedp-postgres psql -X -v ON_ERROR_STOP=1 -U sunmoon -d kedp_migration_check"
+$P < b-sql-db/migrations/0006_indicators_d024_org.down.sql
 $P < b-sql-db/migrations/0005_indicators_d024.down.sql
 $P < b-sql-db/migrations/0004_category.down.sql
 $P < b-sql-db/migrations/0003_visits.down.sql
@@ -146,6 +160,7 @@ $P < b-sql-db/migrations/0003_visits.up.sql
 $P < b-sql-db/checks/smoke.sql   # NOTICE "ok: …" 5줄. 끝에 ROLLBACK하므로 데이터가 남지 않는다
 $P < b-sql-db/migrations/0004_category.up.sql   # smoke.sql은 category_code를 넣지 않으므로 0004 전에 돌린다
 $P < b-sql-db/migrations/0005_indicators_d024.up.sql
+$P < b-sql-db/migrations/0006_indicators_d024_org.up.sql
 # 위 "되돌리기"를 한 뒤 다시 적용하고 smoke.sql을 한 번 더 돌린다
 docker exec kedp-postgres dropdb -U sunmoon kedp_migration_check
 ```
