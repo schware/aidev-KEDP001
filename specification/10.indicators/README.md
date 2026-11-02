@@ -225,14 +225,13 @@
 
 ## D024 추가 지표 (KEDP001-D024, Issue #55)
 
-D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(0005 29, 0006 5), excluded 9, pending 1.
+D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 35(0005 29, 0006 5, 0007 1), excluded 9.
 
 - 확인 방법: 후보 통계표의 항목 목록(ECOS StatisticItemList, KOSIS getMeta)으로 표 이름·주기·항목 코드를 확인하고, 고른 항목의 데이터를 받았다(2026-11-02, `b-go-end/cmd/sample`, 1~7차). 통계청이 아닌 기관의 KOSIS 표는 `-org`(#58)로 받았다. 조사 샘플은 `samples/repository/d024/`(git 밖), 지표별 정상 응답은 `samples/ecos/`, `samples/kosis/`에 있다(파일 목록은 각 폴더의 README).
 - 같은 지표가 여러 표에 있으면 원 작성기관의 표를 골랐다(통계청 작성 지표는 KOSIS 통계청 표, 한국은행 작성 지표는 ECOS, 그 밖의 기관은 그 기관의 KOSIS 표).
 - 주기: 제공처가 D와 M을 둘 다 주면 M. 그 밖에는 가장 짧은 주기 하나(분기·연간이면 분기).
 - 증감률은 제공처가 주는 공식값만 넣었다. 내부에서 계산하지 않는다.
-- verified 지표는 `b-sql-db/migrations/0005_indicators_d024.up.sql`(통계청·ECOS 표)과 `0006_indicators_d024_org.up.sql`(다른 기관 표)이 넣는다(노출 켬, 지금 지표 뒤, D024 순서).
-- pending: 설비투자지수는 응답 형식이 수집기(Rust)와 맞지 않는다(#60).
+- verified 지표는 `b-sql-db/migrations/`의 `0005_indicators_d024`(통계청·ECOS 표), `0006_indicators_d024_org`(다른 기관 표), `0007_indicator_facility_investment`(설비투자지수, Rust #60 뒤)가 넣는다(노출 켬, 지금 지표 뒤, D024 순서).
 
 | # | 구분 | D024 후보 | 상태 | id | 이름 | 제공처 표 / 항목 | 주기 | migration |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -245,7 +244,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 | 7 | 성장·경기 | 제조업생산지수(계절조정) | verified | `kosis-manufacturing-production-sa` | 제조업생산지수(계절조정) | `DT_1F02001` / `T20` / 분류 00,C | M | 0005 |
 | 8 | 성장·경기 | 서비스업생산지수(계절조정) | verified | `kosis-service-production-sa` | 서비스업생산지수(계절조정) | `DT_1KC2020` / `T3` / 분류 T | M | 0005 |
 | 9 | 성장·경기 | 소매판매액지수(계절조정) | verified | `kosis-retail-sales-sa` | 소매판매액지수(계절조정) | `DT_1K41012` / `T3` / 분류 G0 | M | 0005 |
-| 10 | 성장·경기 | 설비투자지수 | pending | `kosis-facility-investment-sa` | 설비투자지수(계절조정) | `DT_1F70011` / `T5` / 분류 ALL,C | M |  |
+| 10 | 성장·경기 | 설비투자지수 | verified | `kosis-facility-investment-sa` | 설비투자지수(계절조정) | `DT_1F70011` / `T5` / 분류 ALL,C | M | 0007 |
 | 11 | 물가 | 소비자물가지수 전년 동월 대비 | verified | `kosis-cpi-yoy` | 소비자물가지수 전년 동월 대비 | `DT_1J22042` / `T03` / 분류 0 | M | 0005 |
 | 12 | 물가 | 생활물가지수 전년 동월 대비 | verified | `kosis-living-cpi-yoy` | 생활물가지수 전년 동월 대비 | `DT_1J22042` / `T03` / 분류 1 | M | 0005 |
 | 13 | 물가 | 신선식품지수 전년 동월 대비 | verified | `kosis-fresh-food-cpi-yoy` | 신선식품지수 전년 동월 대비 | `DT_1J22042` / `T03` / 분류 2 | M | 0005 |
@@ -295,7 +294,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `TIME`, 값 key: `DATA_VALUE`, 단위 key: `UNIT_NAME`
 - 응답 단위: 십억원
 - 샘플: `samples/ecos/200Y105-1400-Q-2024Q1-2026Q2.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 한국은행 국민계정. 분기·연간 중 분기
 
 #### 2. 실질 GDP(원계열)
@@ -310,7 +309,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `TIME`, 값 key: `DATA_VALUE`, 단위 key: `UNIT_NAME`
 - 응답 단위: 십억원
 - 샘플: `samples/ecos/200Y106-1400-Q-2024Q1-2026Q3.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 분기·연간 중 분기
 
 #### 3. 실질 GDP(계절조정)
@@ -325,7 +324,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `TIME`, 값 key: `DATA_VALUE`, 단위 key: `UNIT_NAME`
 - 응답 단위: 십억원
 - 샘플: `samples/ecos/200Y104-1400-Q-2024Q1-2026Q3.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 분기만 있다
 
 #### 4. 실질 GDP 전기 대비 성장률
@@ -340,7 +339,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `TIME`, 값 key: `DATA_VALUE`, 단위 key: `UNIT_NAME`
 - 응답 단위: %
 - 샘플: `samples/ecos/200Y102-10111-Q-2024Q1-2026Q3.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 한국은행이 주는 공식 성장률
 
 #### 5. 실질 GDP 전년 동기 대비 성장률
@@ -355,7 +354,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `TIME`, 값 key: `DATA_VALUE`, 단위 key: `UNIT_NAME`
 - 응답 단위: %
 - 샘플: `samples/ecos/200Y102-10211-Q-2024Q1-2026Q3.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 한국은행이 주는 공식 성장률
 
 #### 6. 전산업생산지수(계절조정)
@@ -371,7 +370,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: 2020=100
 - 샘플: `samples/kosis/DT_1JH20202-T1-1-M-202401-202609.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 원 작성기관 통계청(KOSIS). ECOS 901Y033은 재게시
 
 #### 7. 제조업생산지수(계절조정)
@@ -387,7 +386,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: 2020=100
 - 샘플: `samples/kosis/DT_1F02001-T20-00-C-M-202401-202609.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 통계청 광업제조업동향조사. 분류: 전국(00), 제조업(C). ECOS 901Y032는 재게시
 
 #### 8. 서비스업생산지수(계절조정)
@@ -403,7 +402,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: 2020=100
 - 샘플: `samples/kosis/DT_1KC2020-T3-T-M-202401-202609.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 통계청. ECOS 901Y038은 재게시
 
 #### 9. 소매판매액지수(계절조정)
@@ -419,14 +418,24 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: 2020=100
 - 샘플: `samples/kosis/DT_1K41012-T3-G0-M-202401-202609.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 통계청. 분류 G0 총지수
 
 #### 10. 설비투자지수
 
-- 상태: pending
-- 이유: KOSIS 응답이 수집기와 맞지 않아 넣지 않았다(Rust Issue #60). 분류 B(부문별)가 둘째 자리(objL2)라 objL1=ALL, objL2=C로 불러야 하고, 응답 행에 C1이 없다. Rust는 분류 수만큼 C1, C2…가 있어야 한다
-- 확인한 값: `DT_1F70011` 항목 `T5` 분류 `ALL`, `C` 주기 M, 샘플 `samples/kosis/DT_1F70011-T5-ALL-C-M-202401-202609.json`
+- 상태: verified
+- id: `kosis-facility-investment-sa`
+- 이름: 설비투자지수(계절조정)
+- API: KOSIS statisticsParameterData
+- 통계표: 설비투자지수 (`DT_1F70011`), orgId `101`
+- 항목 코드: `T5` (계절조정지수)
+- 분류 코드: `ALL`, `C` (KOSIS objL1, objL2…)
+- 주기: M, 차트 기간 10 years
+- 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
+- 응답 단위: 2020=100
+- 샘플: `samples/kosis/DT_1F70011-T5-ALL-C-M-202401-202609.json`
+- migration: `0007_indicator_facility_investment`
+- 고른 이유: 통계청. 분류 B(부문별)가 둘째 자리라 objL1=ALL, objL2=C(총지수)로 부른다. 응답 행에 C1이 없고 Rust는 ALL 자리를 대조하지 않는다(#60). 원지수(T3)가 아닌 계절조정지수(T5)
 
 ### 물가
 
@@ -443,7 +452,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: (없음), 관리자 단위(unit): `%`
 - 샘플: `samples/kosis/DT_1J22042-T03-0-M-202401-202609.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 통계청 공식 등락률. 응답에 단위가 없어 관리자 단위 %를 넣는다
 
 #### 12. 생활물가지수 전년 동월 대비
@@ -459,7 +468,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: (없음), 관리자 단위(unit): `%`
 - 샘플: `samples/kosis/DT_1J22042-T03-1-M-202401-202609.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 통계청 공식 등락률. 관리자 단위 %
 
 #### 13. 신선식품지수 전년 동월 대비
@@ -475,7 +484,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: (없음), 관리자 단위(unit): `%`
 - 샘플: `samples/kosis/DT_1J22042-T03-2-M-202401-202609.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 통계청 공식 등락률. 관리자 단위 %
 
 #### 14. 근원물가(식료품·에너지 제외) 전년 동월 대비
@@ -491,7 +500,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: (없음), 관리자 단위(unit): `%`
 - 샘플: `samples/kosis/DT_1J22042-T03-4-M-202401-202609.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 통계청 공식 등락률(식료품및에너지제외지수). 관리자 단위 %
 
 #### 15. 생산자물가지수 전년 동월 대비
@@ -519,7 +528,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: 천명
 - 샘플: `samples/kosis/DT_1DA7001S-T30-0-M-202401-202609.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 통계청 경제활동인구조사. 고용률(kosis-employment-rate)과 같은 표
 
 #### 18. 실업률
@@ -535,7 +544,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: %
 - 샘플: `samples/kosis/DT_1DA7001S-T80-0-M-202401-202609.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 같은 표
 
 #### 19. 경제활동참가율
@@ -551,7 +560,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: %
 - 샘플: `samples/kosis/DT_1DA7001S-T60-0-M-202401-202609.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 같은 표
 
 #### 20. 청년 고용률
@@ -567,7 +576,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: %
 - 샘플: `samples/kosis/DT_1DA7002S-T90-75-M-202401-202609.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 연령 분류 75(15-29세)
 
 #### 21. 명목임금(월)
@@ -583,7 +592,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: 원
 - 샘플: `samples/kosis/DT_118N_MON051-13103110311MD_12-190326INDUSTRY_10S0-size01-M-202401-202609.json`
-- migration: `0006`
+- migration: `0006_indicators_d024_org`
 - 고른 이유: 고용노동부 사업체노동력조사(orgId 118). 산업 전체, 전규모(1인 이상). 월 자료는 발표가 늦어 받은 날 기준 2025-12까지다
 
 #### 22. 실질임금(월)
@@ -605,7 +614,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `TIME`, 값 key: `DATA_VALUE`, 단위 key: `UNIT_NAME`
 - 응답 단위: 연%
 - 샘플: `samples/ecos/721Y001-5020000-M-202401-202610.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 일(817Y002)과 월이 있어 월
 
 #### 24. 국고채 10년
@@ -620,7 +629,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `TIME`, 값 key: `DATA_VALUE`, 단위 key: `UNIT_NAME`
 - 응답 단위: 연%
 - 샘플: `samples/ecos/721Y001-5050000-M-202401-202610.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 일과 월이 있어 월
 
 #### 25. 회사채 3년 AA-
@@ -635,7 +644,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `TIME`, 값 key: `DATA_VALUE`, 단위 key: `UNIT_NAME`
 - 응답 단위: 연%
 - 샘플: `samples/ecos/721Y001-7020000-M-202401-202610.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 일과 월이 있어 월. 민평(8010000)이 아닌 기본 항목
 
 #### 26. 예금은행 대출금리(신규취급액)
@@ -650,7 +659,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `TIME`, 값 key: `DATA_VALUE`, 단위 key: `UNIT_NAME`
 - 응답 단위: 연%
 - 샘플: `samples/ecos/121Y006-BECBLA01-M-202401-202609.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 대출 전체 평균
 
 #### 27. 예금은행 수신금리(신규취급액)
@@ -665,7 +674,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `TIME`, 값 key: `DATA_VALUE`, 단위 key: `UNIT_NAME`
 - 응답 단위: 연%
 - 샘플: `samples/ecos/121Y002-BEABAA2-M-202401-202609.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 저축성수신 평균
 
 #### 28. M2 평잔(원계열)
@@ -680,7 +689,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `TIME`, 값 key: `DATA_VALUE`, 단위 key: `UNIT_NAME`
 - 응답 단위: 십억원
 - 샘플: `samples/ecos/161Y006-BBHA00-M-202401-202609.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 지금 기준 표. 101Y004는 2004-09에 끝난 옛 표
 
 ### 부채·금융안정
@@ -697,7 +706,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `TIME`, 값 key: `DATA_VALUE`, 단위 key: `UNIT_NAME`
 - 응답 단위: 십억원
 - 샘플: `samples/ecos/151Y001-1000000-Q-2024Q1-2026Q2.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 연·분기 중 분기
 
 #### 30. 주택담보대출
@@ -712,7 +721,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `TIME`, 값 key: `DATA_VALUE`, 단위 key: `UNIT_NAME`
 - 응답 단위: 십억원
 - 샘플: `samples/ecos/151Y005-11100A0-M-202401-202608.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: ECOS 잔액에는 주택담보대출 항목이 없고 주택관련대출(주택담보대출 포함)만 있다. 이 항목으로 넣는다(Sun&Moon 결정)
 
 #### 31. 기업신용
@@ -745,7 +754,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `TIME`, 값 key: `DATA_VALUE`, 단위 key: `UNIT_NAME`
 - 응답 단위: 원
 - 샘플: `samples/ecos/731Y004-0000001-0000100-M-202401-202610.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 일(731Y001)과 월이 있어 월. ITEM_CODE2 0000100 평균자료
 
 #### 35. 경상수지
@@ -760,7 +769,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `TIME`, 값 key: `DATA_VALUE`, 단위 key: `UNIT_NAME`
 - 응답 단위: 백만달러
 - 샘플: `samples/ecos/301Y013-000000-M-202401-202608.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 원계열. 계절조정은 301Y017
 
 #### 36. 수출액
@@ -776,7 +785,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: 천불
 - 샘플: `samples/kosis/DT_134001_001-T002-DATA-M-202401-202610.json`
-- migration: `0006`
+- migration: `0006_indicators_d024_org`
 - 고른 이유: 관세청(orgId 134). 분류는 가상분류 DATA 하나다
 
 #### 37. 수입액
@@ -792,7 +801,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: 천불
 - 샘플: `samples/kosis/DT_134001_001-T004-DATA-M-202401-202610.json`
-- migration: `0006`
+- migration: `0006_indicators_d024_org`
 - 고른 이유: 관세청(orgId 134)
 
 #### 38. 무역수지
@@ -808,7 +817,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: 천불
 - 샘플: `samples/kosis/DT_134001_001-T005-DATA-M-202401-202610.json`
-- migration: `0006`
+- migration: `0006_indicators_d024_org`
 - 고른 이유: 관세청 공식값(orgId 134). 내부에서 수출-수입을 계산하지 않는다
 
 #### 39. 일평균 수출액
@@ -841,7 +850,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: 호
 - 샘플: `samples/kosis/DT_MLTM_2080-13103792722T1-13102792722A.0001-13102792722B.0001-13102792722C.0001-M-202401-202609.json`
-- migration: `0006`
+- migration: `0006_indicators_d024_org`
 - 고른 이유: 국토교통부(orgId 116). 전국, 부문 총합, 규모 총합. 시군구별 표(DT_MLTM_2082)는 이 조합의 데이터가 없었다. ECOS 901Y074는 재게시
 
 ### 인구
@@ -859,7 +868,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: 천명
 - 샘플: `samples/kosis/DT_1DA7002S-T10-63-M-202401-202609.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 경제활동인구조사의 15~64세 인구(Sun&Moon 결정). 장래인구추계(DT_1BPA002)는 쓰지 않는다
 
 #### 44. 65세 이상 인구 비율
@@ -875,7 +884,7 @@ D024 "추가 후보" 44개다(Issue 본문의 45개는 44개다). verified 34(00
 - 기간 key: `PRD_DE`, 값 key: `DT`, 단위 key: `UNIT_NM`
 - 응답 단위: (없음), 관리자 단위(unit): `%`
 - 샘플: `samples/kosis/DT_1BPA002-T10-1-33-Y-2015-2025.json`
-- migration: `0005`
+- migration: `0005_indicators_d024`
 - 고른 이유: 중위 추계(AA=1), 구성비 65세 이상(D=33). 비율을 바로 주는 통계청 표는 이것뿐이다. 관리자 단위 %
 
 ## 그 밖의 후보 (D024 이전 목록)
