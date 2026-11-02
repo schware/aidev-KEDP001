@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -26,6 +27,7 @@ type Request struct {
 	Start    string   `yaml:"start"`     // 조회 시작 기간
 	End      string   `yaml:"end"`       // 조회 끝 기간
 	MetaType string   `yaml:"meta_type"` // KOSIS getMeta type (예: ITM, TBL, PRD)
+	Org      string   `yaml:"org"`       // KOSIS 기관 코드 orgId. 비우면 101(통계청). KOSIS에만 쓴다
 	Name     string   `yaml:"name"`      // 저장 파일 이름. 비우면 요청 값으로 만든다
 }
 
@@ -56,6 +58,15 @@ func (r *Request) normalize() error {
 	}
 	if !contains(kinds, r.API) {
 		return fmt.Errorf("%s: api %q: want one of %s", r.Source, r.API, strings.Join(kinds, ", "))
+	}
+	if r.Org != "" {
+		if r.Source != "kosis" {
+			return fmt.Errorf("%s: org is only for kosis", r.Source)
+		}
+		// 파일 이름 앞에도 쓰므로 영문과 숫자만 받는다.
+		if !orgPattern.MatchString(r.Org) {
+			return fmt.Errorf("kosis: org %q: want letters and digits only", r.Org)
+		}
 	}
 
 	need := map[string]string{"stat": r.Stat}
@@ -100,21 +111,29 @@ func contains(list []string, s string) bool {
 	return false
 }
 
+// orgPattern은 KOSIS 기관 코드로 받는 값이다(예: 101, 118).
+var orgPattern = regexp.MustCompile(`^[0-9A-Za-z]+$`)
+
 // defaultName은 저장 파일 이름이다. 통계 자료는 cmd/server와 같은 이름(source.Request.SampleName)을 쓴다.
+// 기관 코드(org)를 넣었으면 앞에 `기관 코드-`를 붙인다(다른 기관의 같은 tblId와 섞이지 않게).
 func (r Request) defaultName() string {
+	prefix := ""
+	if r.Org != "" {
+		prefix = r.Org + "-"
+	}
 	switch r.API {
 	case apiItems:
 		return r.Stat + "-items.json"
 	case apiMeta:
-		return r.Stat + "-meta-" + r.MetaType + ".json"
+		return prefix + r.Stat + "-meta-" + r.MetaType + ".json"
 	}
-	return r.sourceRequest().SampleName()
+	return prefix + r.sourceRequest().SampleName()
 }
 
 // sourceRequest는 통계 자료 요청을 internal/source의 요청으로 바꾼다.
 func (r Request) sourceRequest() source.Request {
 	return source.Request{
-		Indicator: config.Indicator{Source: r.Source, StatCode: r.Stat, ItemCode: r.Item, Classes: r.Classes, Cycle: r.Cycle},
+		Indicator: config.Indicator{Source: r.Source, OrgID: r.Org, StatCode: r.Stat, ItemCode: r.Item, Classes: r.Classes, Cycle: r.Cycle},
 		Start:     r.Start,
 		End:       r.End,
 	}

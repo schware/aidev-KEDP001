@@ -143,6 +143,11 @@ func TestDataURLYear(t *testing.T) {
 	if !strings.Contains(got, "&prdSe=Y&") || !strings.Contains(got, "&orgId=999&") {
 		t.Errorf("dataURL = %s", got)
 	}
+	// 기관 코드가 없으면 통계청(101)이다.
+	req.Indicator.OrgID = ""
+	if got := dataURL("TESTKEY", req); !strings.Contains(got, "&orgId=101&") {
+		t.Errorf("dataURL without org = %s", got)
+	}
 	// cmd/sample처럼 Y를 그대로 넣어도 Y다.
 	req.Indicator.Cycle = "Y"
 	if got := dataURL("TESTKEY", req); !strings.Contains(got, "&prdSe=Y&") {
@@ -177,12 +182,18 @@ func TestDataURL(t *testing.T) {
 }
 
 func TestGetMetaURL(t *testing.T) {
-	got := getMetaURL("TESTKEY", "DT_1DA7001S", "ITM")
+	got := getMetaURL("TESTKEY", "", "DT_1DA7001S", "ITM")
 	want := "https://kosis.kr/openapi/statisticsData.do?apiKey=TESTKEY&format=json&jsonVD=Y&method=getMeta&orgId=101&tblId=DT_1DA7001S&type=ITM"
 	if got != want {
 		t.Errorf("getMetaURL = %s", got)
 	}
-	_, err := New("", fetch.New(0)).FetchMeta(t.Context(), "DT_1DA7001S", "ITM")
+	// 기관 코드를 넣으면 그 기관이다.
+	got = getMetaURL("TESTKEY", "118", "DT_118N_X", "TBL")
+	want = "https://kosis.kr/openapi/statisticsData.do?apiKey=TESTKEY&format=json&jsonVD=Y&method=getMeta&orgId=118&tblId=DT_118N_X&type=TBL"
+	if got != want {
+		t.Errorf("getMetaURL with org = %s", got)
+	}
+	_, err := New("", fetch.New(0)).FetchMeta(t.Context(), "", "DT_1DA7001S", "ITM")
 	if err == nil || !strings.Contains(err.Error(), "KOSIS_API_KEY") {
 		t.Errorf("FetchMeta without key: err = %v", err)
 	}
