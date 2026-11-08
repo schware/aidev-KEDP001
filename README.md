@@ -1,5 +1,7 @@
 # KEDP: 한국 경제 데이터 플랫폼
 
+[![test](https://github.com/schware/aidev-KEDP001/actions/workflows/test.yml/badge.svg)](https://github.com/schware/aidev-KEDP001/actions/workflows/test.yml) [![secret-scan](https://github.com/schware/aidev-KEDP001/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/schware/aidev-KEDP001/actions/workflows/secret-scan.yml)
+
 한국은행 ECOS, 통계청 KOSIS, 공공데이터포털이 무료로 제공하는 공식 통계를 하루 한 번 모아, 한 화면에서 주요 경제지표를 보여 주는 웹 서비스다.
 
 ![메인 화면: 구분별 경제지표 카드](docs/images/main.png)
