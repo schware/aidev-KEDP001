@@ -5,6 +5,7 @@
 - 관리자 API(5장) 근거: KEDP001-D012, D018, D019, D022, `specification/50.web/README.md` 1장 관리자, 4~6장, Issue #40
 - 방문자 수 API(6장) 근거: Issue #48
 - 지표 구분(`category`, 2·3장, 5.4~5.6, 5.11) 근거: KEDP001-D024, Issue #52
+- 직전 값과 차이(`previous`, `change`, 2·3장) 근거: KEDP001-D024, Issue #70
 - 구현: `b-go-end/internal/api`, `b-go-end/internal/store/read.go`, 관리자 API는 `b-go-end/internal/admin`, `b-go-end/internal/store/admin.go`
 
 화면(TypeScript)은 이 문서만 보고 API를 쓴다. ECOS·KOSIS·DB를 직접 부르지 않는다.
@@ -72,6 +73,7 @@ GET /api/indicators
 - 노출(`indicator_display.is_visible`)된 지표만 돌려준다. 화면 설정이 없는 지표도 나오지 않는다.
 - 순서는 구분 순서(`category.sort_order`)가 먼저이고, 같은 구분 안에서는 `sort_order`, 같으면 `id` 순서다. 화면은 받은 순서대로 구분을 묶고 카드를 놓는다.
 - `latest`는 마지막 관측값이다. 아직 수집한 값이 없으면 `null`이다.
+- `previous`는 `latest`의 직전 값, `change`는 `latest.value - previous.value`다. 고르는 법은 2.1에 있다.
 
 응답 200:
 
@@ -85,7 +87,9 @@ GET /api/indicators
       "cycle": "M",
       "unit": "연%",
       "decimals": 2,
-      "latest": { "period": "2026-09-01", "value": 2.5 }
+      "latest": { "period": "2026-09-01", "value": 2.5 },
+      "previous": { "period": "2026-08-01", "value": 2.75 },
+      "change": -0.25
     },
     {
       "id": "data-go-kr-kodex-200",
@@ -94,7 +98,9 @@ GET /api/indicators
       "cycle": "D",
       "unit": null,
       "decimals": null,
-      "latest": null
+      "latest": null,
+      "previous": null,
+      "change": null
     }
   ]
 }
@@ -111,6 +117,40 @@ GET /api/indicators
 | `unit` | 문자열 또는 `null` | 단위(1.2) |
 | `decimals` | 숫자 또는 `null` | 소수 자릿수(1.1) |
 | `latest` | 객체 또는 `null` | 최신값 `{period, value}` |
+| `previous` | 객체 또는 `null` | 직전 값 `{period, value}`(2.1). 없으면 `null` |
+| `change` | 숫자 또는 `null` | `latest.value - previous.value`. `previous`가 `null`이면 `null`. 값이 같으면 `0` |
+
+## 2.1 직전 값 `previous`와 차이 `change`
+
+| 주기 | 직전 값 |
+| --- | --- |
+| `M`, `Q`, `A` | 최신 기간의 바로 앞 기간(1개월, 1분기, 1년 전) 관측값. 그 기간 값이 없으면 `null`이다. 더 앞 기간 값으로 대신하지 않는다 |
+| `D` | 최신 값 바로 앞의 관측값. 주말·휴일은 관측값이 없으므로 건너뛴다(예: 월요일의 직전 값은 금요일) |
+
+- 관측값이 하나뿐이거나 없으면 `previous`, `change` 모두 `null`이다.
+- 직전 값도 지금 주기(1.3)의 관측값에서만 고른다.
+- `change`는 DB의 `numeric`으로 빼므로 반올림 오차가 없다(예: `100.4 - 100.1`은 `0.3`이다). 화면은 `change`를 그대로 쓰고 직접 빼지 않는다.
+- 읽을 때 계산하고 저장하지 않는다. 증감률(%)은 주지 않는다(KEDP001-D024).
+
+예: 일 주기, 최신 값이 월요일
+
+```json
+{
+  "latest": { "period": "2026-10-26", "value": 100.4 },
+  "previous": { "period": "2026-10-23", "value": 100.1 },
+  "change": 0.3
+}
+```
+
+예: 월 주기, 바로 앞 달(2026-08) 값이 없다
+
+```json
+{
+  "latest": { "period": "2026-09-01", "value": 2 },
+  "previous": null,
+  "change": null
+}
+```
 
 ---
 
@@ -138,6 +178,8 @@ GET /api/indicators/{id}
   "stat_code": "722Y001",
   "last_collected_at": "2026-10-25T06:00:03+09:00",
   "latest": { "period": "2026-09-01", "value": 2.5 },
+  "previous": { "period": "2026-08-01", "value": 2.5 },
+  "change": 0,
   "chart_period": "10 years",
   "chart": [
     { "period": "2016-11-01", "value": 1.25 },
@@ -163,6 +205,7 @@ GET /api/indicators/{id}
 | `stat_code` | 문자열 | 통계 코드(ECOS 통계 코드, KOSIS 표 id, 공공데이터포털 종목 코드) |
 | `last_collected_at` | 시각 또는 `null` | 마지막 수집 일시. 이 지표의 수집 기록(`collection_run`) 중 `success`로 끝난 마지막 시각이다. 데이터 없음·오류는 넣지 않는다. 없으면 `null` |
 | `latest` | 객체 또는 `null` | 현재값(최신 관측값) |
+| `previous`, `change` | | 직전 값과 차이. 2장, 2.1과 같다 |
 | `chart_period` | 문자열 또는 `null` | 차트 기간(PostgreSQL interval 글, 예: `10 years`, `1 year`). 화면 설정이 없으면 `null` |
 | `chart` | 배열 | 차트 데이터. 기간 시작일이 (오늘 − 차트 기간) 이후인 관측값, 오래된 것부터. 오늘은 Asia/Seoul 기준이다. 화면 설정이 없으면 `[]` |
 | `recent` | 배열 | 최근 데이터 표. 최근 관측값 최대 10개, 최근 것부터 |
