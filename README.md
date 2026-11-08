@@ -77,6 +77,8 @@ flowchart LR
 
 여러 프로젝트가 함께 쓰는 규칙은 [AI-Native-Development-Rules](https://github.com/schware/AI-Native-Development-Rules)에 있다.
 
+만든 과정과 어려웠던 점은 [사례 문서](docs/case-study.md)에, 한 장 요약은 [docs/one-page.md](docs/one-page.md)에 있다.
+
 ## 실행 방법
 
 명령 하나로 바로 뜨지는 않는다. 제공처 키와 DB 준비가 필요하다.
