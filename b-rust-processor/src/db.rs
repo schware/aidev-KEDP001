@@ -1,7 +1,7 @@
 //! DB 읽기와 쓰기. kedp_rust 계정으로 접속한다(KEDP001-D022 14, 설계서 4.1).
 //!
 //! - 읽는 테이블: indicator
-//! - 쓰는 테이블: raw_response, observation
+//! - 쓰는 테이블: raw_response, observation, indicator.source_unit(이 칸만, 0008 migration, Issue #76)
 //!   (observation_history는 observation의 트리거 observation_keep_history가 쓴다)
 
 use std::time::Duration;
@@ -47,6 +47,8 @@ pub struct Counts {
     pub updated: i32,
     /// 값이 같았던 행
     pub unchanged: i32,
+    /// 응답 단위(indicator.source_unit)를 바꿨으면 (이전 단위, 새 단위). 같거나 응답에 단위가 없으면 None이다
+    pub source_unit: Option<(Option<String>, String)>,
 }
 
 /// 연결 pool을 만든다. 실제 접속은 처음 쓸 때 한다.
@@ -137,19 +139,44 @@ pub async fn load_indicator(client: &Client, id: &str) -> Result<Option<Indicato
     }))
 }
 
-/// 원본 응답과 관측값을 한 transaction으로 쓴다. 중간에 실패하면 아무것도 남지 않는다.
-/// 데이터 없음·오류 응답은 rows가 비어 있어 원본 응답만 쓴다(KEDP001-D022 13).
+/// 원본 응답, 관측값, 응답 단위를 한 transaction으로 쓴다. 중간에 실패하면 아무것도 남지 않는다.
+/// 데이터 없음·오류 응답은 rows가 비어 있고 unit이 None이라 원본 응답만 쓴다(KEDP001-D022 13).
+/// unit이 None이면 source_unit을 그대로 둔다(null로 덮지 않는다).
 pub async fn save(
     client: &mut Client,
     ind: &Indicator,
     raw: &RawResponse<'_>,
     rows: &[Observation],
+    unit: Option<&str>,
 ) -> Result<Counts, DbError> {
     let tx = client.transaction().await.map_err(db_error)?;
     insert_raw_response(&tx, raw).await?;
-    let counts = upsert_observations(&tx, ind, raw, rows).await?;
+    let mut counts = upsert_observations(&tx, ind, raw, rows).await?;
+    if let Some(unit) = unit {
+        counts.source_unit = update_source_unit(&tx, &ind.id, unit).await?;
+    }
     tx.commit().await.map_err(db_error)?;
     Ok(counts)
+}
+
+/// 응답 단위가 지금 source_unit과 다를 때만 바꾸고 (이전 단위, 새 단위)를 돌려준다.
+/// 관리자 단위(unit)는 건드리지 않는다. 화면은 unit이 있으면 그것을 쓴다(KEDP001-D022 9).
+/// 이전 값은 같은 문장 안의 부분 조회(o)로 읽는다. RETURNING은 바뀐 뒤 값을 보여 주기 때문이다.
+const UPDATE_SOURCE_UNIT: &str = "UPDATE indicator i SET source_unit = $2
+     FROM (SELECT id, source_unit FROM indicator WHERE id = $1) o
+     WHERE i.id = o.id AND i.source_unit IS DISTINCT FROM $2
+     RETURNING o.source_unit";
+
+async fn update_source_unit(
+    tx: &deadpool_postgres::Transaction<'_>,
+    id: &str,
+    unit: &str,
+) -> Result<Option<(Option<String>, String)>, DbError> {
+    let row = tx
+        .query_opt(UPDATE_SOURCE_UNIT, &[&id, &unit])
+        .await
+        .map_err(db_error)?;
+    Ok(row.map(|row| (row.get(0), unit.to_string())))
 }
 
 async fn insert_raw_response(

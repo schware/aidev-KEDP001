@@ -110,7 +110,7 @@
 
 # 4. 테이블
 
-정의는 `b-sql-db/migrations/0001_schema.up.sql`(방문자 수는 `0003_visits.up.sql`, 지표 구분은 `0004_category.up.sql`)이 기준이다. 아래는 칼럼의 뜻과 규칙만 적는다.
+정의는 `b-sql-db/migrations/0001_schema.up.sql`(방문자 수는 `0003_visits.up.sql`, 지표 구분은 `0004_category.up.sql`, 응답 단위는 `0008_rust_source_unit.up.sql`)이 기준이다. 아래는 칼럼의 뜻과 규칙만 적는다.
 
 | 테이블 | 역할 | 주요 칼럼 |
 | --- | --- | --- |
@@ -138,14 +138,15 @@
 
 ## 4.1 접속 계정과 권한 (결정 14)
 
-정의는 `b-sql-db/migrations/0002_roles.up.sql`(방문자 수는 `0003_visits.up.sql`, 지표 구분은 `0004_category.up.sql`)이 기준이다. 비밀번호는 저장소에 쓰지 않는다. migration을 적용한 뒤 소유자가 psql의 `\password`로 정한다.
+정의는 `b-sql-db/migrations/0002_roles.up.sql`(방문자 수는 `0003_visits.up.sql`, 지표 구분은 `0004_category.up.sql`, 응답 단위는 `0008_rust_source_unit.up.sql`)이 기준이다. 비밀번호는 저장소에 쓰지 않는다. migration을 적용한 뒤 소유자가 psql의 `\password`로 정한다.
 
 | 계정 | 쓰기 | 읽기만 |
 | --- | --- | --- |
 | `kedp_go` | `indicator`, `indicator_display`, `indicator_relation`, `app_setting`, `visit_daily`(추가·수정·삭제), `collection_run`(추가·수정) | `source`, `category`, `observation`(조회 API) |
-| `kedp_rust` | `observation`(추가·수정), `observation_history`(트리거가 추가), `raw_response`(추가) | `source`, `indicator` |
+| `kedp_rust` | `observation`(추가·수정), `observation_history`(트리거가 추가), `raw_response`(추가), `indicator.source_unit`(수정, 이 칸만) | `source`, `indicator` |
 
 - `kedp_rust`는 `observation`, `raw_response`도 읽을 수 있다(덮어쓰기와 재처리).
+- `kedp_rust`는 `indicator`에서 응답 단위 `source_unit` 칸만 고칠 수 있다. 수집할 때 응답의 단위로 채운다(결정 9, Issue #76). 관리자 단위 `unit` 등 다른 칸은 읽기만 한다.
 - 테이블을 만들고 고치는 일(migration)은 소유자 계정으로 한다.
 - `kedp_rust`는 `visit_daily`를 쓰지도 읽지도 않는다.
 - `kedp_rust`는 `category`를 읽지 않는다. `indicator.category_code`는 `indicator` 읽기 권한으로 보이지만 쓰지 않는다.

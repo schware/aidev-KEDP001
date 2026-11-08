@@ -4,6 +4,7 @@
 //! 2. 제공처 오류 코드가 있으면 HTTP 상태와 상관없이 그 코드로 NO_DATA 또는 ERROR다.
 //! 3. 그 밖에 HTTP 상태가 200이 아니면 ERROR(`HTTP_<상태 코드>`)다.
 //! 4. 행마다 기간을 바꾸고 값을 확인한다. 한 행이라도 읽을 수 없으면 ERROR(`INVALID_RESPONSE`)다.
+//! 5. 응답 단위는 가장 최근 기간 행의 단위다(ECOS UNIT_NAME, KOSIS UNIT_NM). 없거나 비었으면 None이다(Issue #76).
 //!
 //! 이 모듈은 DB를 쓰지 않는다. 읽은 결과(Reading)를 db 모듈이 저장한다.
 
@@ -42,10 +43,13 @@ pub struct Indicator {
 /// 응답 하나를 읽은 결과
 #[derive(Debug, PartialEq)]
 pub enum Reading {
-    /// 정상 응답. 관측값으로 쓸 행과, 값이 비어 건너뛴 행 수
+    /// 정상 응답. 관측값으로 쓸 행과, 값이 비어 건너뛴 행 수, 응답 단위
     Success {
         rows: Vec<Observation>,
         skipped_empty: i32,
+        /// 가장 최근 기간 행의 단위(indicator.source_unit에 쓴다). 응답에 단위가 없거나 비었으면 None이다.
+        /// None이면 지금 값을 그대로 둔다. 공공데이터포털은 늘 None이다.
+        unit: Option<String>,
     },
     /// 제공처가 데이터 없음으로 답했다
     NoData { code: String, message: String },
@@ -81,6 +85,8 @@ struct Row {
     /// None이면 응답의 값이 null이다
     value: Option<String>,
     source_changed_at: Option<String>,
+    /// 응답 단위. 칸이 없거나 문자열이 아니거나 비었으면 None이다
+    unit: Option<String>,
 }
 
 /// 응답 하나를 읽는다.
@@ -126,6 +132,8 @@ fn convert(ind: &Indicator, rows: Vec<Row>) -> Result<Reading, String> {
     let mut out = Vec::with_capacity(rows.len());
     let mut skipped_empty = 0;
     let mut seen = HashSet::new();
+    // 가장 최근 기간 행의 (기간 시작일, 단위). 값이 빈 행도 기간과 단위는 본다.
+    let mut latest: Option<(NaiveDate, Option<String>)> = None;
     for (i, row) in rows.into_iter().enumerate() {
         let at = |message: String| format!("row {}: {message}", i + 1);
 
@@ -133,6 +141,9 @@ fn convert(ind: &Indicator, rows: Vec<Row>) -> Result<Reading, String> {
         // 한 응답에 같은 기간이 두 번 오면 어느 값을 쓸지 알 수 없다.
         if !seen.insert(period_start) {
             return Err(at(format!("period {:?} appears twice", row.period)));
+        }
+        if latest.as_ref().is_none_or(|(p, _)| period_start > *p) {
+            latest = Some((period_start, row.unit));
         }
 
         // 빈 값(결측)은 관측값으로 쓰지 않는다(KEDP001-D022 15).
@@ -165,6 +176,7 @@ fn convert(ind: &Indicator, rows: Vec<Row>) -> Result<Reading, String> {
     Ok(Reading::Success {
         rows: out,
         skipped_empty,
+        unit: latest.and_then(|(_, unit)| unit),
     })
 }
 
@@ -190,6 +202,13 @@ fn text(obj: &Value, key: &str) -> Result<Option<String>, String> {
         Some(_) => Err(format!("{key} is not a string")),
         None => Err(format!("{key} is missing")),
     }
+}
+
+/// 단위 칸을 읽는다. 칸이 없거나 null이거나 문자열이 아니거나 비었으면 None이다.
+/// 단위는 관측값을 바꾸지 않으므로, 모양이 달라도 응답을 오류로 만들지 않는다.
+fn unit(obj: &Value, key: &str) -> Option<String> {
+    let s = obj.get(key)?.as_str()?.trim();
+    (!s.is_empty()).then(|| s.to_string())
 }
 
 /// 꼭 값이 있어야 하는 문자열 칸을 읽는다.
@@ -270,6 +289,7 @@ mod tests {
             Reading::Success {
                 rows,
                 skipped_empty,
+                ..
             } => (rows, skipped_empty),
             other => panic!("not success: {other:?}"),
         }
@@ -602,6 +622,91 @@ mod tests {
         ] {
             assert!(numeric(bad).is_none(), "{bad}");
         }
+    }
+
+    /// 정상 응답의 단위
+    fn unit_of(reading: Reading) -> Option<String> {
+        match reading {
+            Reading::Success { unit, .. } => unit,
+            other => panic!("not success: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn reads_unit() {
+        // ECOS UNIT_NAME
+        let body = sample("ecos/722Y001-0101000-M-202401-202609.json");
+        assert_eq!(
+            unit_of(read(&ecos_base_rate(Cycle::M), 200, &body)).as_deref(),
+            Some("연%")
+        );
+        // KOSIS UNIT_NM
+        let body = sample("kosis/DT_1DA7001S-T90-0-M-202401-202609.json");
+        assert_eq!(
+            unit_of(read(&kosis_employment(Cycle::M), 200, &body)).as_deref(),
+            Some("%")
+        );
+        let population = indicator(Source::Kosis, "DT_1IN1502", Some("T100"), &["00"], Cycle::A);
+        let body = sample("kosis/DT_1IN1502-T100-00-Y-2015-2025.json");
+        assert_eq!(
+            unit_of(read(&population, 200, &body)).as_deref(),
+            Some("명")
+        );
+        // 공공데이터포털은 단위가 없다.
+        let body = sample("data-go-kr/069500-D-20260901-20261022.json");
+        assert_eq!(unit_of(read(&data_go_kr("069500"), 200, &body)), None);
+    }
+
+    #[test]
+    fn unit_missing_is_none() {
+        // 출생아 수 표는 UNIT_NM이 없고 단위가 C1_NM(출생아수(명))에 있다. 단위로 읽지 않는다.
+        let births = indicator(
+            Source::Kosis,
+            "INH_1B8000F_01",
+            Some("T1"),
+            &["11"],
+            Cycle::A,
+        );
+        let body = sample("kosis/INH_1B8000F_01-T1-11-Y-2015-2025.json");
+        let (rows, _) = success(read(&births, 200, &body));
+        assert_eq!(rows.len(), 11);
+        assert_eq!(unit_of(read(&births, 200, &body)), None);
+        // 빈 단위, 공백, null, 문자열이 아닌 값은 없는 것과 같다. 관측값은 그대로 읽는다.
+        let body = String::from_utf8(sample("ecos/722Y001-0101000-M-202401-202609.json")).unwrap();
+        for empty in [r#""""#, r#"" ""#, "null", "1"] {
+            let b = body.replace(r#""UNIT_NAME":"연%""#, &format!(r#""UNIT_NAME":{empty}"#));
+            let (rows, _) = success(read(&ecos_base_rate(Cycle::M), 200, b.as_bytes()));
+            assert_eq!(rows.len(), 33, "{empty}");
+            assert_eq!(
+                unit_of(read(&ecos_base_rate(Cycle::M), 200, b.as_bytes())),
+                None,
+                "{empty}"
+            );
+        }
+    }
+
+    #[test]
+    fn unit_of_latest_period() {
+        let unit = r#""UNIT_NAME":"연%""#;
+        let body = String::from_utf8(sample("ecos/722Y001-0101000-M-202401-202609.json")).unwrap();
+        assert_eq!(body.matches(unit).count(), 33);
+        // ECOS는 오래된 것부터 온다. 앞 32행의 단위가 달라도 마지막 행(202609)의 단위를 쓴다.
+        let old = body.replacen(unit, r#""UNIT_NAME":"옛 단위""#, 32);
+        assert_eq!(
+            unit_of(read(&ecos_base_rate(Cycle::M), 200, old.as_bytes())).as_deref(),
+            Some("연%")
+        );
+        // 마지막 행만 단위가 비었으면 앞 행 단위로 대신하지 않는다.
+        let at = body.rfind(unit).unwrap();
+        let last_empty = format!(
+            "{}{}",
+            &body[..at],
+            body[at..].replacen(unit, r#""UNIT_NAME":"""#, 1)
+        );
+        assert_eq!(
+            unit_of(read(&ecos_base_rate(Cycle::M), 200, last_empty.as_bytes())),
+            None
+        );
     }
 
     // 아래는 samples/repository/(조사 샘플, git 제외)의 파일로 기간 형식을 확인한다(설계서 5.1 근거 파일).

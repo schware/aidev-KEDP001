@@ -1,5 +1,5 @@
 //! gRPC 서비스. b-proto/kedp/v1/processor.proto의 ProcessorService를 구현한다.
-//! 흐름과 결과는 b-proto/README.md를 따른다.
+//! 흐름과 결과는 b-proto/README.md를 따른다. 응답 단위(indicator.source_unit)도 함께 쓴다(Issue #76).
 
 use chrono::{DateTime, Utc};
 use deadpool_postgres::Pool;
@@ -99,13 +99,20 @@ impl Processor {
             http_status: req.http_status,
             body: &req.body,
         };
-        let rows = match &reading {
-            Reading::Success { rows, .. } => rows.as_slice(),
-            _ => &[],
+        let (rows, unit) = match &reading {
+            Reading::Success { rows, unit, .. } => (rows.as_slice(), unit.as_deref()),
+            _ => (&[][..], None),
         };
-        let counts = db::save(&mut client, &indicator, &raw, rows)
+        let counts = db::save(&mut client, &indicator, &raw, rows, unit)
             .await
             .map_err(to_status)?;
+        // 응답 단위가 바뀌었으면(처음 채움, 기준연도 개편 등) 지표 id, 이전 단위, 새 단위를 남긴다.
+        if let Some((old, new)) = &counts.source_unit {
+            eprintln!(
+                "source_unit changed indicator_id={:?} old={:?} new={:?}",
+                indicator.id, old, new
+            );
+        }
 
         // 5. 결과를 돌려준다. 오류 메시지에는 페이지 번호를 붙인다.
         Ok(match reading {

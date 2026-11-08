@@ -1,11 +1,11 @@
 //! ECOS StatisticSearch 응답 (samples/ecos/)
 //!
-//! - 정상: `{"StatisticSearch":{"list_total_count":33,"row":[{"STAT_CODE","ITEM_CODE1"…,"TIME","DATA_VALUE"}]}}`
+//! - 정상: `{"StatisticSearch":{"list_total_count":33,"row":[{"STAT_CODE","ITEM_CODE1"…,"UNIT_NAME","TIME","DATA_VALUE"}]}}`
 //! - 오류: `{"RESULT":{"CODE":"INFO-100","MESSAGE":"…"}}`. `INFO-200`은 데이터 없음이다.
 
 use serde_json::Value;
 
-use super::{Answer, Indicator, Row, expect, read_rows, required, text};
+use super::{Answer, Indicator, Row, expect, read_rows, required, text, unit};
 
 const NO_DATA_CODE: &str = "INFO-200";
 
@@ -43,5 +43,6 @@ fn read_row(ind: &Indicator, row: &Value) -> Result<Row, String> {
         period: required(row, "TIME")?,
         value: text(row, "DATA_VALUE")?,
         source_changed_at: None,
+        unit: unit(row, "UNIT_NAME"),
     })
 }
