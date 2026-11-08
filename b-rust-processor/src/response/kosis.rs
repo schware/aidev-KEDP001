@@ -1,11 +1,11 @@
 //! KOSIS statisticsParameterData 응답 (samples/kosis/)
 //!
-//! - 정상: 최상위가 행 배열 `[{"ORG_ID","TBL_ID","ITM_ID","C1","PRD_SE","PRD_DE","DT","LST_CHN_DE"…}]`
+//! - 정상: 최상위가 행 배열 `[{"ORG_ID","TBL_ID","ITM_ID","C1","PRD_SE","PRD_DE","DT","UNIT_NM","LST_CHN_DE"…}]`
 //! - 오류: `{"err":"11","errMsg":"…"}` (HTTP 200). `30`은 데이터 없음이다.
 
 use serde_json::Value;
 
-use super::{Answer, Indicator, Row, expect, read_rows, required, text};
+use super::{Answer, Indicator, Row, expect, read_rows, required, text, unit};
 
 const NO_DATA_CODE: &str = "30";
 
@@ -54,5 +54,7 @@ fn read_row(ind: &Indicator, row: &Value) -> Result<Row, String> {
             .get("LST_CHN_DE")
             .and_then(Value::as_str)
             .map(str::to_string),
+        // 단위는 UNIT_NM이다. 표에 따라 없다(예: 출생아 수 표는 C1_NM에 단위가 붙어 있다).
+        unit: unit(row, "UNIT_NM"),
     })
 }

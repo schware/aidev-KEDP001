@@ -18,12 +18,14 @@ b-sql-db/
 │   ├── 0006_indicators_d024_org.up.sql   D024 추가 지표 2차 5개(통계청이 아닌 기관의 KOSIS 표)
 │   ├── 0006_indicators_d024_org.down.sql 0006 지표를 지운다(관측값·이력 포함)
 │   ├── 0007_indicator_facility_investment.up.sql   설비투자지수(계절조정) 1개(분류 {ALL,C}, Rust #60 뒤)
-│   └── 0007_indicator_facility_investment.down.sql 0007 지표를 지운다(관측값·이력 포함)
+│   ├── 0007_indicator_facility_investment.down.sql 0007 지표를 지운다(관측값·이력 포함)
+│   ├── 0008_rust_source_unit.up.sql   kedp_rust에 indicator.source_unit 칸 UPDATE 권한(Rust #76)
+│   └── 0008_rust_source_unit.down.sql 그 권한만 거둔다(채워진 값은 남는다)
 └── checks/
     └── smoke.sql              권한, 기간 검사, 이력 트리거, 원본 주소 검사 확인 (시험 DB 전용)
 ```
 
-- 적용은 번호 순서(0001 → … → 0007), 되돌리기는 반대 순서(0007 → … → 0001)로 한다.
+- 적용은 번호 순서(0001 → … → 0008), 되돌리기는 반대 순서(0008 → … → 0001)로 한다.
 - 파일마다 `BEGIN`/`COMMIT`으로 감싸 있어 중간에 실패하면 그 파일 전체가 적용되지 않는다.
 - 접속 정보와 비밀번호는 저장소에 쓰지 않는다. 계정 비밀번호는 적용한 뒤 소유자가 정한다(아래 "비밀번호").
 - PostgreSQL 11 이상이 필요하다(`EXECUTE FUNCTION`). 개발 서버는 PostgreSQL 17이다.
@@ -56,6 +58,7 @@ $K < b-sql-db/migrations/0004_category.up.sql
 $K < b-sql-db/migrations/0005_indicators_d024.up.sql
 $K < b-sql-db/migrations/0006_indicators_d024_org.up.sql
 $K < b-sql-db/migrations/0007_indicator_facility_investment.up.sql
+$K < b-sql-db/migrations/0008_rust_source_unit.up.sql
 ```
 
 이미 적용한 번호는 건너뛰고 그다음 번호부터 적용한다(예: 0003까지 적용한 DB에는 0004만). 배포 서버(macpro-debian)는 `deploy/README.md` 7장 "DB migration이 생겼을 때"를 따른다.
@@ -114,6 +117,19 @@ $K -c "SELECT id, name FROM indicator WHERE id = 'kosis-facility-investment-sa'"
 
 적용 뒤 지표는 42개다. 첫 수집 호출은 KOSIS 1번이다.
 
+### 0008 적용 순서
+
+`0008`은 `kedp_rust`에 `indicator.source_unit` 칸 하나만 UPDATE 권한을 준다(Issue #76). 지표와 관측값은 바꾸지 않는다.
+
+- Rust image를 #76이 들어간 것으로 바꾸기 **전에** 적용한다. 권한 없이 새 Rust가 단위를 쓰려 하면 그 지표의 수집이 실패한다.
+- 되돌릴 때는 반대로 Rust를 이전 image로 먼저 바꾸고 `0008_rust_source_unit.down.sql`을 적용한다.
+
+적용 뒤 확인(`kedp_rust | UPDATE | source_unit` 한 줄만 나온다):
+
+```sh
+$K -c "SELECT grantee, privilege_type, column_name FROM information_schema.column_privileges WHERE table_name = 'indicator' AND grantee = 'kedp_rust' AND privilege_type = 'UPDATE'"
+```
+
 ## 확인
 
 ```sh
@@ -151,6 +167,7 @@ docker exec -it kedp-postgres psql -h 127.0.0.1 -U kedp_rust -d kedp -c 'select 
 
 ```sh
 P="docker exec -i kedp-postgres psql -X -v ON_ERROR_STOP=1 -U sunmoon -d kedp_migration_check"
+$P < b-sql-db/migrations/0008_rust_source_unit.down.sql
 $P < b-sql-db/migrations/0007_indicator_facility_investment.down.sql
 $P < b-sql-db/migrations/0006_indicators_d024_org.down.sql
 $P < b-sql-db/migrations/0005_indicators_d024.down.sql
@@ -176,6 +193,7 @@ $P < b-sql-db/migrations/0004_category.up.sql   # smoke.sql은 category_code를 
 $P < b-sql-db/migrations/0005_indicators_d024.up.sql
 $P < b-sql-db/migrations/0006_indicators_d024_org.up.sql
 $P < b-sql-db/migrations/0007_indicator_facility_investment.up.sql
+$P < b-sql-db/migrations/0008_rust_source_unit.up.sql
 # 위 "되돌리기"를 한 뒤 다시 적용하고 smoke.sql을 한 번 더 돌린다
 docker exec kedp-postgres dropdb -U sunmoon kedp_migration_check
 ```

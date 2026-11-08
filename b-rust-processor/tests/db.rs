@@ -358,3 +358,84 @@ async fn grpc_errors_write_nothing() {
     assert_eq!(raw_responses(&pool, 13).await, Vec::<bool>::new());
     assert_eq!(raw_responses(&pool, 999).await, Vec::<bool>::new());
 }
+
+/// (관리자 단위 unit, 응답 단위 source_unit)
+async fn units(pool: &Pool, indicator_id: &str) -> (Option<String>, Option<String>) {
+    let client = pool.get().await.unwrap();
+    let row = client
+        .query_one(
+            "SELECT unit, source_unit FROM indicator WHERE id = $1",
+            &[&indicator_id],
+        )
+        .await
+        .unwrap();
+    (row.get(0), row.get(1))
+}
+
+fn some(s: &str) -> Option<String> {
+    Some(s.to_string())
+}
+
+#[tokio::test]
+#[ignore = "시험 DB가 필요하다(scripts/db-test.sh)"]
+async fn source_unit() {
+    let (p, pool) = setup().await;
+    let ecos = sample("ecos/722Y001-0101000-M-202401-202609.json");
+
+    // ECOS: 비어 있던 source_unit을 응답 단위(UNIT_NAME)로 채운다. 관리자 단위는 그대로다.
+    let r = process(&p, request(14, "ecos-unit", 200, ecos.clone())).await;
+    assert_eq!(counts(&r), (ProcessStatus::Success, 33, 0, 0, 0));
+    assert_eq!(
+        units(&pool, "ecos-unit").await,
+        (some("관리자 단위"), some("연%"))
+    );
+
+    // 같은 단위면 그대로다.
+    let r = process(&p, request(15, "ecos-unit", 200, ecos.clone())).await;
+    assert_eq!(counts(&r), (ProcessStatus::Success, 0, 0, 33, 0));
+    assert_eq!(
+        units(&pool, "ecos-unit").await,
+        (some("관리자 단위"), some("연%"))
+    );
+
+    // 단위가 바뀌면(예: 기준연도 개편) 새 단위로 바꾼다. 관측값은 같다.
+    let changed = String::from_utf8(ecos.clone())
+        .unwrap()
+        .replace(r#""UNIT_NAME":"연%""#, r#""UNIT_NAME":"%""#);
+    let r = process(&p, request(16, "ecos-unit", 200, changed.into_bytes())).await;
+    assert_eq!(counts(&r), (ProcessStatus::Success, 0, 0, 33, 0));
+    assert_eq!(
+        units(&pool, "ecos-unit").await,
+        (some("관리자 단위"), some("%"))
+    );
+
+    // 데이터 없음 응답은 단위를 건드리지 않는다.
+    let r = process(
+        &p,
+        request(17, "ecos-unit", 200, sample("ecos/error-INFO-200.json")),
+    )
+    .await;
+    assert_eq!(r.status(), ProcessStatus::NoData);
+    assert_eq!(
+        units(&pool, "ecos-unit").await,
+        (some("관리자 단위"), some("%"))
+    );
+
+    // KOSIS: UNIT_NM
+    let body = sample("kosis/DT_1DA7001S-T90-0-M-202401-202609.json");
+    let r = process(&p, request(18, "kosis-unit", 200, body)).await;
+    assert_eq!(r.status(), ProcessStatus::Success);
+    assert_eq!(units(&pool, "kosis-unit").await, (None, some("%")));
+
+    // 단위가 없는 응답(출생아 수 표: UNIT_NM이 없고 C1_NM에 단위가 있다)은 지금 값을 null로 덮지 않는다.
+    let body = sample("kosis/INH_1B8000F_01-T1-11-Y-2015-2025.json");
+    let r = process(&p, request(19, "kosis-births-unit", 200, body)).await;
+    assert_eq!(counts(&r), (ProcessStatus::Success, 11, 0, 0, 0));
+    assert_eq!(units(&pool, "kosis-births-unit").await, (None, some("명")));
+
+    // 공공데이터포털은 단위가 없어 비어 있는 그대로다.
+    let body = sample("data-go-kr/069500-D-20260901-20261022.json");
+    let r = process(&p, request(20, "data-go-kr-unit", 200, body)).await;
+    assert_eq!(r.status(), ProcessStatus::Success);
+    assert_eq!(units(&pool, "data-go-kr-unit").await, (None, None));
+}

@@ -16,7 +16,7 @@ b-rust-processor/
 │   ├── response.rs       응답 읽기, 빈 값 건너뛰기, 값 확인 (결과: 정상 / 데이터 없음 / 오류)
 │   ├── response/         제공처별 응답 모양: ecos.rs, kosis.rs, data_go_kr.rs
 │   ├── period.rs         기간 변환 (설계서 5.1)
-│   └── db.rs             indicator 읽기, raw_response·observation 쓰기
+│   └── db.rs             indicator 읽기, raw_response·observation·indicator.source_unit 쓰기
 ├── tests/
 │   ├── db.rs             시험 DB 테스트
 │   ├── fixtures.sql      시험 DB에 넣는 지표와 수집 기록
@@ -103,3 +103,9 @@ CARGO_BUILD_JOBS=2 cargo test
 - 한 응답에 같은 기간이 두 번 나오면 `INVALID_RESPONSE`다.
 - `observation.collected_at`에는 Go가 응답을 받은 시각(`received_at`)을 넣는다. 값이 같은 행도 `collected_at`, `run_id`, `value_raw`를 새 값으로 덮어쓴다(이력은 남지 않는다).
 - 원본 응답이 UTF-8 JSON이면 `raw_response.body`(jsonb), 아니면 `body_text`에 넣는다. `body_text`에서 UTF-8이 아닌 바이트와 NUL은 U+FFFD로 바꾼다.
+- 응답 단위를 `indicator.source_unit`에 쓴다(KEDP001-D022 결정 9, Issue #76). 관측값과 같은 transaction이다.
+  - ECOS는 행의 `UNIT_NAME`, KOSIS는 행의 `UNIT_NM`을 읽는다. 공공데이터포털은 단위가 없어 쓰지 않는다.
+  - 응답 안에서 가장 최근 기간 행의 단위를 쓴다. 그 행의 단위가 없거나 비었으면(예: 출생아 수 표는 `UNIT_NM`이 없고 `C1_NM`에 단위가 붙어 있다) 지금 값을 그대로 둔다(null로 덮지 않는다).
+  - 지금 값과 다를 때만 UPDATE한다. 바뀌면 서버 기록에 `source_unit changed indicator_id=… old=… new=…`를 남긴다.
+  - 관리자 단위(`unit`)는 건드리지 않는다. 화면은 `unit`이 있으면 그것을 쓴다(Go 조회 API).
+  - 권한은 `b-sql-db/migrations/0008_rust_source_unit.up.sql`(이 칸 하나만)이다. 0008이 없는 DB에서는 단위가 있는 응답의 처리가 `INTERNAL`로 실패한다.

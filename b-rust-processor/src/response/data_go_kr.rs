@@ -66,6 +66,8 @@ pub(super) fn read(ind: &Indicator, json: &Value) -> Result<Answer, String> {
             period: required(row, "basDt")?,
             value: text(row, value_field)?,
             source_changed_at: None,
+            // 이 API에는 단위 칸이 없다.
+            unit: None,
         })
     })
 }

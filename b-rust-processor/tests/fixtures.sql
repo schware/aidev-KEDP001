@@ -12,6 +12,13 @@ INSERT INTO indicator (id, name, source_code, org_id, stat_code, item_code, clas
     ('kosis-births', '출생아 수', 'kosis', '101', 'INH_1B8000F_01', 'T1', '{11}', NULL, 'A'),
     ('data-go-kr-kodex-200', 'KODEX 200', 'data-go-kr', NULL, '069500', NULL, '{}', 'clpr', 'D');
 
+-- 응답 단위(source_unit, Issue #76) 시험용. ecos-unit은 관리자 단위가 있고, kosis-births-unit은 응답 단위가 이미 있다.
+INSERT INTO indicator (id, name, source_code, org_id, stat_code, item_code, classes, value_field, cycle, unit, source_unit) VALUES
+    ('ecos-unit', '단위 시험(ECOS)', 'ecos', NULL, '722Y001', '0101000', '{}', NULL, 'M', '관리자 단위', NULL),
+    ('kosis-unit', '단위 시험(KOSIS)', 'kosis', '101', 'DT_1DA7001S', 'T90', '{0}', NULL, 'M', NULL, NULL),
+    ('kosis-births-unit', '단위 시험(단위 없는 응답)', 'kosis', '101', 'INH_1B8000F_01', 'T1', '{11}', NULL, 'A', NULL, '명'),
+    ('data-go-kr-unit', '단위 시험(공공데이터포털)', 'data-go-kr', NULL, '069500', NULL, '{}', 'clpr', 'D', NULL, NULL);
+
 -- run_id를 테스트에서 바로 쓰려고 id를 정해서 넣는다.
 INSERT INTO collection_run (id, source_code, indicator_id, status, trigger) OVERRIDING SYSTEM VALUE VALUES
     (1, 'ecos', 'ecos-base-rate', 'running', 'manual'),
@@ -26,6 +33,13 @@ INSERT INTO collection_run (id, source_code, indicator_id, status, trigger) OVER
     (10, 'kosis', 'kosis-employment-rate', 'running', 'manual'),
     (11, 'data-go-kr', 'data-go-kr-kodex-200', 'running', 'manual'),
     (12, 'ecos', 'ecos-base-rate', 'running', 'manual'),
-    (13, 'ecos', 'ecos-base-rate', 'running', 'manual');
+    (13, 'ecos', 'ecos-base-rate', 'running', 'manual'),
+    (14, 'ecos', 'ecos-unit', 'running', 'manual'),
+    (15, 'ecos', 'ecos-unit', 'running', 'manual'),
+    (16, 'ecos', 'ecos-unit', 'running', 'manual'),
+    (17, 'ecos', 'ecos-unit', 'running', 'manual'),
+    (18, 'kosis', 'kosis-unit', 'running', 'manual'),
+    (19, 'kosis', 'kosis-births-unit', 'running', 'manual'),
+    (20, 'data-go-kr', 'data-go-kr-unit', 'running', 'manual');
 
 COMMIT;
