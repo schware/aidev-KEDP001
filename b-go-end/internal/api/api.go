@@ -42,6 +42,7 @@ type Category struct {
 }
 
 // Card는 메인 화면 카드 하나다.
+// Previous는 직전 값, Change는 latest.value - previous.value다. 직전 값이 없으면 둘 다 null이다(Issue #70).
 type Card struct {
 	ID       string   `json:"id"`
 	Name     string   `json:"name"`
@@ -50,6 +51,8 @@ type Card struct {
 	Unit     *string  `json:"unit"`
 	Decimals *int     `json:"decimals"`
 	Latest   *Point   `json:"latest"`
+	Previous *Point   `json:"previous"`
+	Change   *float64 `json:"change"`
 }
 
 // CardList는 GET /api/indicators의 응답이다.
@@ -83,6 +86,8 @@ type Detail struct {
 	// LastCollectedAt은 Asia/Seoul 시각(RFC 3339)이다.
 	LastCollectedAt *string   `json:"last_collected_at"`
 	Latest          *Point    `json:"latest"`
+	Previous        *Point    `json:"previous"`
+	Change          *float64  `json:"change"`
 	ChartPeriod     *string   `json:"chart_period"`
 	Chart           []Point   `json:"chart"`
 	Recent          []Point   `json:"recent"`
@@ -106,7 +111,8 @@ func Handler(st Store, now func() time.Time, loc *time.Location) http.Handler {
 		out := CardList{Indicators: make([]Card, 0, len(cards))}
 		for _, c := range cards {
 			out.Indicators = append(out.Indicators, Card{
-				ID: c.ID, Name: c.Name, Category: Category{Code: c.CategoryCode, Name: c.CategoryName}, Cycle: c.Cycle, Unit: c.Unit, Decimals: c.Decimals, Latest: point(c.Latest),
+				ID: c.ID, Name: c.Name, Category: Category{Code: c.CategoryCode, Name: c.CategoryName}, Cycle: c.Cycle, Unit: c.Unit, Decimals: c.Decimals,
+				Latest: point(c.Latest), Previous: point(c.Previous), Change: c.Change,
 			})
 		}
 		write(w, http.StatusOK, out)
@@ -126,6 +132,8 @@ func Handler(st Store, now func() time.Time, loc *time.Location) http.Handler {
 			Source:      Source{Code: d.SourceCode, Name: d.SourceName},
 			StatCode:    d.StatCode,
 			Latest:      point(d.Latest),
+			Previous:    point(d.Previous),
+			Change:      d.Change,
 			ChartPeriod: d.ChartPeriod,
 			Chart:       points(d.Chart),
 			Recent:      points(d.Recent),

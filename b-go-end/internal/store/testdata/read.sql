@@ -13,7 +13,14 @@ INSERT INTO indicator (id, name, source_code, stat_code, item_code, org_id, valu
     -- 노출하지 않는다
     ('t-hidden', '숨김', 'data-go-kr', '069500', NULL, NULL, 'clpr', 'D', NULL, NULL, 'market'),
     -- 화면 설정이 없다. 빈 단위는 없는 것과 같다
-    ('t-bare', '설정 없음', 'ecos', 'X', 'Y', NULL, NULL, 'Q', '', '', 'money');
+    ('t-bare', '설정 없음', 'ecos', 'X', 'Y', NULL, NULL, 'Q', '', '', 'money'),
+    -- 직전 값(Issue #70). 화면 설정이 없어 카드에는 나오지 않고 상세로만 읽는다.
+    -- 바로 앞 기간(2026-08) 값이 없다
+    ('t-gap', '앞 기간 없음', 'ecos', 'GAP', 'Y', NULL, NULL, 'M', NULL, NULL, 'money'),
+    -- 일 주기: 주말을 건너뛴 앞 관측값이 직전 값이다
+    ('t-day', '일 주기', 'data-go-kr', '000001', NULL, NULL, 'clpr', 'D', NULL, NULL, 'market'),
+    -- 관측값이 하나뿐이다
+    ('t-one', '하나뿐', 'ecos', 'ONE', 'Y', NULL, NULL, 'Q', NULL, NULL, 'money');
 
 -- 소수 자릿수: t-rate 2, t-pop은 없다
 INSERT INTO indicator_display (indicator_id, is_visible, sort_order, chart_period, number_format, notice) VALUES
@@ -46,7 +53,14 @@ FROM (VALUES
     -- 이전 주기 값. 기간이 더 늦어도 읽지 않는다
     ('t-rate', 'Q', '2026-10-01', '2026Q4', '99'),
     ('t-pop', 'A', '2024-01-01', '2024', '51700000'),
-    ('t-pop', 'A', '2025-01-01', '2025', '51684564')
+    ('t-pop', 'A', '2025-01-01', '2025', '51684564'),
+    ('t-gap', 'M', '2026-07-01', '202607', '1.5'),
+    ('t-gap', 'M', '2026-09-01', '202609', '2'),
+    -- 2026-10-23은 금요일, 2026-10-26은 월요일이다. 100.4 - 100.1을 float으로 빼면 0.30000000000000426이다
+    ('t-day', 'D', '2026-10-22', '20261022', '99.9'),
+    ('t-day', 'D', '2026-10-23', '20261023', '100.1'),
+    ('t-day', 'D', '2026-10-26', '20261026', '100.4'),
+    ('t-one', 'Q', '2026-04-01', '2026Q2', '1.2')
 ) AS o (indicator_id, cycle, period_start, period_raw, value);
 
 COMMIT;

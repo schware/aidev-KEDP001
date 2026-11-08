@@ -63,9 +63,11 @@ func TestCards(t *testing.T) {
 	// t-hidden(노출 안 함), t-bare(화면 설정 없음)는 없다.
 	want := []Card{
 		{ID: "t-rate", Name: "금리", Cycle: "M", CategoryCode: "money", CategoryName: "금리·통화",
-			Unit: ptr("%"), Decimals: ptr(2), Latest: ptr(pt("2026-09-01", 2.5))},
+			Unit: ptr("%"), Decimals: ptr(2), Latest: ptr(pt("2026-09-01", 2.5)),
+			Previous: ptr(pt("2026-08-01", 2.75)), Change: ptr(-0.25)},
 		{ID: "t-pop", Name: "인구", Cycle: "A", CategoryCode: "population", CategoryName: "인구",
-			Unit: ptr("명"), Latest: ptr(pt("2025-01-01", 51684564))},
+			Unit: ptr("명"), Latest: ptr(pt("2025-01-01", 51684564)),
+			Previous: ptr(pt("2024-01-01", 51700000)), Change: ptr(-15436.0)},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got  %+v\nwant %+v", got, want)
@@ -87,6 +89,8 @@ func TestDetail(t *testing.T) {
 		CategoryCode: "money", CategoryName: "금리·통화",
 		Unit: ptr("%"), Decimals: ptr(2), ChartPeriod: ptr("1 year"),
 		Latest: ptr(pt("2026-09-01", 2.5)),
+		// 바로 앞 기간 값이다. 이전 주기(Q) 값은 보지 않는다.
+		Previous: ptr(pt("2026-08-01", 2.75)), Change: ptr(-0.25),
 		// 2025-10-30 이후, 오래된 것부터. 이전 주기(Q) 값은 없다.
 		Chart:   []Point{pt("2025-11-01", 3), pt("2026-08-01", 2.75), pt("2026-09-01", 2.5)},
 		Recent:  []Point{pt("2026-09-01", 2.5), pt("2026-08-01", 2.75), pt("2025-11-01", 3)},
@@ -130,4 +134,38 @@ func TestDetailNotFound(t *testing.T) {
 	if _, err := s.Detail(context.Background(), "none", day("2026-10-30"), 10); !errors.Is(err, ErrNotFound) {
 		t.Errorf("err = %v, want ErrNotFound", err)
 	}
+}
+
+// 직전 값(Issue #70): 바로 앞 기간이 빈 경우, D 주기, 관측값이 하나뿐인 경우
+func TestDetailPrevious(t *testing.T) {
+	s := openTestDB(t)
+	tests := []struct {
+		id       string
+		latest   Point
+		previous *Point
+		change   *float64
+	}{
+		// 2026-08 값이 없다. 더 앞(2026-07) 값으로 대신하지 않는다.
+		{"t-gap", pt("2026-09-01", 2), nil, nil},
+		// 월요일의 직전 값은 금요일이다. 차이는 numeric으로 빼서 0.3이다.
+		{"t-day", pt("2026-10-26", 100.4), ptr(pt("2026-10-23", 100.1)), ptr(0.3)},
+		{"t-one", pt("2026-04-01", 1.2), nil, nil},
+	}
+	for _, tt := range tests {
+		got, err := s.Detail(context.Background(), tt.id, day("2026-10-30"), 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Latest == nil || *got.Latest != tt.latest ||
+			!reflect.DeepEqual(got.Previous, tt.previous) || !reflect.DeepEqual(got.Change, tt.change) {
+			t.Errorf("%s: latest %v, previous %v, change %v", tt.id, got.Latest, got.Previous, deref(got.Change))
+		}
+	}
+}
+
+func deref(p *float64) any {
+	if p == nil {
+		return nil
+	}
+	return *p
 }
