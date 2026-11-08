@@ -1,0 +1,87 @@
+name: test
+
+# PR마다, main push마다 Go, Rust, 화면 검사를 돌린다(#69).
+# job 3개는 서로 기다리지 않는다. 하나가 실패해도 나머지 결과가 보인다.
+# DB와 API 키(.env)는 쓰지 않는다. DB가 필요한 test는 환경 변수가 없거나 #[ignore]라서 건너뛴다.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: b-go-end
+    steps:
+      - uses: actions/checkout@v5
+
+      # 버전은 b-go-end/Dockerfile과 같다.
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27'
+          cache-dependency-path: b-go-end/go.sum
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+  rust:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: b-rust-processor
+    steps:
+      - uses: actions/checkout@v5
+
+      # build.rs가 ../b-proto/kedp/v1/processor.proto를 읽는다. timestamp.proto는 libprotobuf-dev에 있다.
+      - name: Install protoc
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends protobuf-compiler libprotobuf-dev
+          protoc --version
+
+      # 버전은 b-rust-processor/Dockerfile과 같다. rustflags를 비워 경고를 오류로 바꾸지 않는다(로컬과 같은 명령).
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: '1.99'
+          rustflags: ''
+          cache-workspaces: b-rust-processor
+
+      - name: cargo test
+        run: cargo test --locked
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: f-ts-end
+    steps:
+      - uses: actions/checkout@v5
+
+      # 버전은 f-ts-end/Dockerfile과 같다.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: f-ts-end/package-lock.json
+
+      - name: npm ci
+        run: npm ci --no-audit --no-fund
+
+      - name: npm run lint
+        run: npm run lint
+
+      - name: npm test
+        run: npm test
+
+      - name: npm run build
+        run: npm run build
