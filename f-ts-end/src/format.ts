@@ -1,5 +1,5 @@
 // 화면에 보이는 글을 만든다. React와 상관없이 시험할 수 있게 따로 둔다.
-import type { Cycle } from './api.ts'
+import type { Cycle, Point } from './api.ts'
 
 /**
  * 기간 시작일(YYYY-MM-DD)을 주기에 맞춰 보여준다(40.api 1.1).
@@ -45,6 +45,39 @@ export function formatValue(value: number, decimals: number | null = null): stri
 export function formatValueUnit(value: number, unit: string | null, decimals: number | null = null): string {
   const v = formatValue(value, decimals)
   return unit ? `${v} ${unit}` : v
+}
+
+const changeLabels: Record<Cycle, string> = { M: '전월 대비', Q: '전기 대비', A: '전년 대비', D: '직전 대비' }
+
+/** 증감 표시(50.web 2장 카드 구성, 3장). up은 빨강 ▲, down은 파랑 ▼, same은 회색 "-"다. */
+export interface ChangeView {
+  label: string
+  direction: 'up' | 'down' | 'same'
+  text: string
+}
+
+/**
+ * 증감 한 줄(예: 전월 대비 ▲0.20 연%). previous나 change가 null이면 보이지 않으므로 null이다(40.api 2.1).
+ * 숫자는 지표의 소수 자릿수와 단위를 따른다. 그 자릿수로 0이 되면(예: 0.001을 2자리로) 같은 것으로 본다.
+ * change는 API가 준 값을 그대로 쓰고 화면에서 다시 빼지 않는다.
+ */
+export function formatChange(
+  cycle: Cycle,
+  previous: Point | null,
+  change: number | null,
+  unit: string | null,
+  decimals: number | null = null,
+): ChangeView | null {
+  if (previous === null || change === null) {
+    return null
+  }
+  const label = changeLabels[cycle] ?? '직전 대비'
+  const size = Math.abs(change)
+  if (formatValue(size, decimals) === formatValue(0, decimals)) {
+    return { label, direction: 'same', text: '-' }
+  }
+  const mark = change > 0 ? '▲' : '▼'
+  return { label, direction: change > 0 ? 'up' : 'down', text: mark + formatValueUnit(size, unit, decimals) }
 }
 
 const cycleNames: Record<Cycle, string> = { D: '일간', M: '월간', Q: '분기', A: '연간' }

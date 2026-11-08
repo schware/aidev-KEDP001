@@ -127,6 +127,22 @@ function series(f: Fake): Point[] {
   }))
 }
 
+/**
+ * 직전 값과 차이(40.api 2.1). M, Q, A는 바로 앞 기간 값(없으면 null), D는 바로 앞 관측값이다.
+ * 차이는 DB가 numeric으로 빼는 것처럼 보이게 소수 10자리에서 반올림한다.
+ */
+function previousOf(f: Fake, s: Point[]): Pick<Card, 'previous' | 'change'> {
+  const latest = s.at(-1)
+  const previous =
+    latest === undefined
+      ? undefined
+      : f.cycle === 'D'
+        ? s.at(-2)
+        : s.find((p) => p.period === back(latest.period, f.cycle, 1))
+  if (!latest || !previous) return { previous: null, change: null }
+  return { previous, change: Number((latest.value - previous.value).toFixed(10)) }
+}
+
 /** 관리자 목록 순서(40.api 5.4): order, id. 화면 설정이 없는 지표는 맨 뒤. */
 export function sorted(): Fake[] {
   return [...fakes].sort(
@@ -148,6 +164,7 @@ export function cards(): { indicators: Card[] } {
         unit: unitOf(f),
         decimals: f.decimals,
         latest: series(f).at(-1) ?? null,
+        ...previousOf(f, series(f)),
       })),
   }
 }
@@ -168,6 +185,7 @@ export function detail(id: string): Detail | undefined {
     stat_code: f.stat_code,
     last_collected_at: s.length > 0 ? f.last_collected_at : null,
     latest: s.at(-1) ?? null,
+    ...previousOf(f, s),
     chart_period: f.order === null ? null : f.chart_period,
     chart: f.order === null ? [] : s,
     recent: s.slice(-10).reverse(),

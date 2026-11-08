@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatCycle, formatDateTime, formatPeriod, formatValue, formatValueUnit } from './format.ts'
+import { formatChange, formatCycle, formatDateTime, formatPeriod, formatValue, formatValueUnit } from './format.ts'
 
 describe('formatPeriod', () => {
   it('주기에 맞춰 보여준다', () => {
@@ -94,5 +94,35 @@ describe('formatDateTime', () => {
 
   it('읽을 수 없으면 그대로', () => {
     expect(formatDateTime('nope')).toBe('nope')
+  })
+})
+
+describe('formatChange', () => {
+  const prev = { period: '2026-08-01', value: 2.3 }
+
+  it('오르면 ▲, 내리면 ▼, 소수 자릿수와 단위를 따른다', () => {
+    expect(formatChange('M', prev, 0.2, '연%', 2)).toEqual({ label: '전월 대비', direction: 'up', text: '▲0.20 연%' })
+    expect(formatChange('M', prev, -0.25, '연%', 2)).toEqual({ label: '전월 대비', direction: 'down', text: '▼0.25 연%' })
+    expect(formatChange('A', prev, -150000, '명', 0)).toEqual({ label: '전년 대비', direction: 'down', text: '▼150,000 명' })
+  })
+
+  it('단위가 없거나 소수 자릿수가 없으면 받은 값 그대로', () => {
+    expect(formatChange('D', prev, 0.3, null)).toEqual({ label: '직전 대비', direction: 'up', text: '▲0.3' })
+  })
+
+  it('주기마다 다른 이름', () => {
+    expect(formatChange('Q', prev, 1, null)?.label).toBe('전기 대비')
+    expect(formatChange('D', prev, 1, null)?.label).toBe('직전 대비')
+  })
+
+  it('같으면 "-", 소수 자릿수로 0이 되어도 같다', () => {
+    expect(formatChange('M', prev, 0, '연%', 2)).toEqual({ label: '전월 대비', direction: 'same', text: '-' })
+    expect(formatChange('M', prev, 0.001, '연%', 2)?.direction).toBe('same')
+    expect(formatChange('M', prev, -0.001, '연%', 2)?.text).toBe('-')
+  })
+
+  it('previous나 change가 null이면 보이지 않는다', () => {
+    expect(formatChange('M', null, null, '연%', 2)).toBeNull()
+    expect(formatChange('M', prev, null, '연%', 2)).toBeNull()
   })
 })
