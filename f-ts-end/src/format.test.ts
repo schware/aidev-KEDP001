@@ -101,9 +101,26 @@ describe('formatChange', () => {
   const prev = { period: '2026-08-01', value: 2.3 }
 
   it('오르면 ▲, 내리면 ▼, 소수 자릿수와 단위를 따른다', () => {
-    expect(formatChange('M', prev, 0.2, '연%', 2)).toEqual({ label: '전월 대비', direction: 'up', text: '▲0.20 연%' })
-    expect(formatChange('M', prev, -0.25, '연%', 2)).toEqual({ label: '전월 대비', direction: 'down', text: '▼0.25 연%' })
+    expect(formatChange('M', prev, 0.2, '연%', 2)).toEqual({ label: '전월 대비', direction: 'up', text: '▲0.20%p' })
+    expect(formatChange('M', prev, -0.25, '연%', 2)).toEqual({ label: '전월 대비', direction: 'down', text: '▼0.25%p' })
     expect(formatChange('A', prev, -150000, '명', 0)).toEqual({ label: '전년 대비', direction: 'down', text: '▼150,000 명' })
+  })
+
+  it('단위가 %로 끝나면 %p, 그 밖의 단위는 그대로', () => {
+    // %
+    expect(formatChange('M', prev, -0.1, '%', 1)?.text).toBe('▼0.1%p')
+    expect(formatChange('M', prev, 1.25, '%')?.text).toBe('▲1.25%p')
+    // 연%
+    expect(formatChange('M', prev, 0.25, '연%', 2)?.text).toBe('▲0.25%p')
+    // 단위 없음, 빈 단위
+    expect(formatChange('D', prev, -0.1, null)?.text).toBe('▼0.1')
+    expect(formatChange('D', prev, -0.1, '')?.text).toBe('▼0.1')
+    // 다른 단위: %가 끝이 아니면 바꾸지 않는다
+    expect(formatChange('M', prev, 12.5, '십억원', 1)?.text).toBe('▲12.5 십억원')
+    expect(formatChange('M', prev, -0.4, '2020＝100', 1)?.text).toBe('▼0.4 2020＝100')
+    expect(formatChange('M', prev, 3, '%포인트')?.text).toBe('▲3 %포인트')
+    // 같으면 단위와 상관없이 "-"
+    expect(formatChange('M', prev, 0, '%', 1)?.text).toBe('-')
   })
 
   it('단위가 없거나 소수 자릿수가 없으면 받은 값 그대로', () => {
