@@ -59,6 +59,7 @@ export interface ChangeView {
 /**
  * 증감 한 줄(예: 전월 대비 ▲0.20 연%). previous나 change가 null이면 보이지 않으므로 null이다(40.api 2.1).
  * 숫자는 지표의 소수 자릿수와 단위를 따른다. 그 자릿수로 0이 되면(예: 0.001을 2자리로) 같은 것으로 본다.
+ * 단위가 %로 끝나면(%, 연% 등) 증감은 비율 변화가 아니라 차이이므로 %p로 쓴다(예: ▼0.1%p, Issue #77).
  * change는 API가 준 값을 그대로 쓰고 화면에서 다시 빼지 않는다.
  */
 export function formatChange(
@@ -77,7 +78,13 @@ export function formatChange(
     return { label, direction: 'same', text: '-' }
   }
   const mark = change > 0 ? '▲' : '▼'
-  return { label, direction: change > 0 ? 'up' : 'down', text: mark + formatValueUnit(size, unit, decimals) }
+  const text = isPercent(unit) ? `${formatValue(size, decimals)}%p` : formatValueUnit(size, unit, decimals)
+  return { label, direction: change > 0 ? 'up' : 'down', text: mark + text }
+}
+
+/** 단위가 %로 끝나는지(%, 연% 등). 증감을 %p로 쓸지 정한다. */
+function isPercent(unit: string | null): boolean {
+  return unit?.trim().endsWith('%') ?? false
 }
 
 const cycleNames: Record<Cycle, string> = { D: '일간', M: '월간', Q: '분기', A: '연간' }
