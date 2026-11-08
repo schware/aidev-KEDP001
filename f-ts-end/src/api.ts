@@ -24,6 +24,10 @@ export interface Card {
   /** 소수 자릿수 0~4. null이면 받은 값 그대로 보여준다(40.api 1.1). */
   decimals: number | null
   latest: Point | null
+  /** latest의 직전 값(40.api 2.1). 없으면 null이다. */
+  previous: Point | null
+  /** latest.value - previous.value(40.api 2.1). previous가 null이면 null이다. */
+  change: number | null
 }
 
 export interface CardList {
@@ -43,6 +47,8 @@ export interface Detail {
   stat_code: string
   last_collected_at: string | null
   latest: Point | null
+  previous: Point | null
+  change: number | null
   chart_period: string | null
   chart: Point[]
   recent: Point[]

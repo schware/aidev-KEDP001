@@ -7,7 +7,7 @@ const labor = { code: 'labor', name: '고용·소득' }
 const market = { code: 'market', name: '금융시장' }
 
 function card(id: string, category: Card['category']): Card {
-  return { id, name: id, category, cycle: 'M', unit: null, decimals: null, latest: null }
+  return { id, name: id, category, cycle: 'M', unit: null, decimals: null, latest: null, previous: null, change: null }
 }
 
 const ids = (g: ReturnType<typeof groupByCategory>) => g.map((x) => [x.category.name, x.cards.map((c) => c.id)])
