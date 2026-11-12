@@ -14,18 +14,76 @@
 
 세 방식 모두 같은 소스로 같은 image를 만든다.
 
+## 2. 흐름
+
+### A. dell-debian build
+
 ```text
-A  dell-debian ──(build)──► image ──(SSH)──────────────────────────► macpro-debian
-
-B  GitHub ──(build)──► GHCR ◄──(docker pull, 로그인 없이)──────────── macpro-debian
-
-C  GitHub ──(build)──► artifact(14일)
-                            │ (로그인한 곳에서 받기)
-                            ▼
-                       dell-debian ──(SSH, 받은 파일은 바로 지움)──► macpro-debian
+ PR merge (main)
+     │
+     ▼
+ dell-debian
+   ① git switch main && git pull
+   ② deploy/build.sh            main 검사 → image 3개 build (tag = commit hash)
+   ③ deploy/send.sh macpro-debian <tag>
+     │
+     │  SSH  (docker save → gzip → docker load)
+     ▼
+ macpro-debian
+   ④ KEDP_IMAGE_TAG=<tag> docker compose up -d
 ```
 
-## 2. 언제 무엇을 쓰나
+### B. GitHub build + GHCR
+
+```text
+ PR merge (main)
+     │
+     ▼
+ GitHub Actions (build-ghcr)              ← Run workflow를 눌러야 돈다
+   ① PR로 merge된 commit인지 확인
+   ② image 3개 build (tag = commit hash)
+   ③ GHCR에 push
+   ④ 최근 5개만 남기고 정리
+   ⑤ Summary에 tag, PR 번호
+     │
+     ▼
+ GHCR  ghcr.io/schware/kedp-*:<tag>       ← 공개, 로그인 없이 누구나 받음
+     ▲
+     │  docker pull
+     │
+ macpro-debian
+   ⑥ curl … compose.yaml                  (compose.yaml이 바뀌었을 때만)
+   ⑦ KEDP_IMAGE_PREFIX=ghcr.io/schware/ KEDP_IMAGE_TAG=<tag> docker compose pull go rust nginx
+   ⑧ KEDP_IMAGE_PREFIX=ghcr.io/schware/ KEDP_IMAGE_TAG=<tag> docker compose up -d
+```
+
+### C. GitHub build + artifact
+
+```text
+ PR merge (main)
+     │
+     ▼
+ GitHub Actions (build-artifact)          ← Run workflow를 눌러야 돈다
+   ① PR로 merge된 commit인지 확인
+   ② image 3개 build, 파일 하나로 묶기 (tag = commit hash)
+   ③ artifact로 올리기  kedp-images-<tag>
+   ④ Summary에 tag, PR 번호
+     │
+     ▼
+ artifact  kedp-images-<tag>.tar.gz       ← 14일 뒤 사라짐, GitHub 로그인한 곳에서 받음
+     ▲
+     │  gh run download (로그인 필요)
+     │
+ dell-debian (GitHub에 로그인됨)
+   ⑤ deploy/send-artifact.sh macpro-debian <tag>
+        받기 → SSH로 보내기 → 받은 파일 지우기
+     │
+     │  SSH  (docker load)
+     ▼
+ macpro-debian
+   ⑥ KEDP_IMAGE_TAG=<tag> docker compose up -d
+```
+## 3. 언제 무엇을 쓰나
 
 | 상황 | 방식 |
 | --- | --- |
@@ -33,45 +91,12 @@ C  GitHub ──(build)──► artifact(14일)
 | dell-debian을 쉬게 하고, 최근 버전 몇 개 안에서 되돌리고 싶다 | **B** |
 | QA까지 확정하고 배포한다. 14일 안에 확정하고, 지나면 되돌리지 않고 고쳐서 새로 만든다 | **C** |
 
-## 3. 세 방식 모두 지키는 규칙
+## 4. 세 방식 모두 지키는 규칙
 
 - PR로 main에 merge된 commit만 배포한다.
 - tag는 그 commit의 짧은 hash 7자리다. 같은 commit이면 A, B, C의 tag가 같다.
 - image 안에 키와 비밀번호는 없다. 키는 macpro-debian의 `.env`에서 넣는다.
 - 비용은 0이다(공개 저장소, 공개 package).
-
-## 4. 실제로 하는 일
-
-### A
-
-`docs/docker-deploy.md` 7장 "새 버전 올리기"
-
-### B
-
-1. GitHub: Actions → **build-ghcr** → Run workflow → Summary에서 tag 확인
-2. macpro-debian(`/srv/projects/kedp`)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/schware/aidev-KEDP001/main/deploy/compose.yaml -o compose.yaml   # compose.yaml이 바뀌었을 때만
-KEDP_IMAGE_PREFIX=ghcr.io/schware/ KEDP_IMAGE_TAG=<tag> docker compose pull go rust nginx
-KEDP_IMAGE_PREFIX=ghcr.io/schware/ KEDP_IMAGE_TAG=<tag> docker compose up -d
-```
-
-### C
-
-1. GitHub: Actions → **build-artifact** → Run workflow → Summary에서 tag 확인
-2. dell-debian(GitHub에 로그인된 곳)
-
-```bash
-cd /srv/projects/aidev-kedp001 && git switch main && git pull
-deploy/send-artifact.sh macpro-debian <tag>
-```
-
-3. macpro-debian(`/srv/projects/kedp`)
-
-```bash
-KEDP_IMAGE_TAG=<tag> docker compose up -d
-```
 
 ## 5. 알아 둘 것
 
