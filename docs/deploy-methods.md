@@ -14,6 +14,32 @@
 
 세 방식 모두 같은 소스로 같은 image를 만든다.
 
+```mermaid
+flowchart LR
+    pr["PR merge<br/>(main commit)"]
+
+    subgraph A["A"]
+        a1["dell-debian<br/>deploy/build.sh"] --> a2["dell-debian<br/>deploy/send.sh"]
+    end
+
+    subgraph B["B"]
+        b1["GitHub Actions<br/>build-ghcr"] --> b2[("GHCR<br/>최근 5개")]
+    end
+
+    subgraph C["C"]
+        c1["GitHub Actions<br/>build-artifact"] --> c2[("artifact<br/>14일")]
+        c2 -- "로그인한 곳에서 받기" --> c3["dell-debian<br/>deploy/send-artifact.sh"]
+    end
+
+    pr --> a1
+    pr --> b1
+    pr --> c1
+
+    a2 -- "SSH" --> m["macpro-debian<br/>docker compose up -d"]
+    b2 -- "docker pull<br/>(로그인 없이)" --> m
+    c3 -- "SSH" --> m
+```
+
 ## 2. 언제 무엇을 쓰나
 
 | 상황 | 방식 |
