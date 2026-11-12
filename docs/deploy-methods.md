@@ -14,98 +14,18 @@
 
 세 방식 모두 같은 소스로 같은 image를 만든다.
 
-```mermaid
-flowchart LR
-    pr["PR merge<br/>(main commit)"]
+```text
+A  dell-debian ──(build)──► image ──(SSH)──────────────────────────► macpro-debian
 
-    subgraph A["A"]
-        a1["dell-debian<br/>deploy/build.sh"] --> a2["dell-debian<br/>deploy/send.sh"]
-    end
+B  GitHub ──(build)──► GHCR ◄──(docker pull, 로그인 없이)──────────── macpro-debian
 
-    subgraph B["B"]
-        b1["GitHub Actions<br/>build-ghcr"] --> b2[("GHCR<br/>최근 5개")]
-    end
-
-    subgraph C["C"]
-        c1["GitHub Actions<br/>build-artifact"] --> c2[("artifact<br/>14일")]
-        c2 -- "로그인한 곳에서 받기" --> c3["dell-debian<br/>deploy/send-artifact.sh"]
-    end
-
-    pr --> a1
-    pr --> b1
-    pr --> c1
-
-    a2 -- "SSH" --> m["macpro-debian<br/>docker compose up -d"]
-    b2 -- "docker pull<br/>(로그인 없이)" --> m
-    c3 -- "SSH" --> m
+C  GitHub ──(build)──► artifact(14일)
+                            │ (로그인한 곳에서 받기)
+                            ▼
+                       dell-debian ──(SSH, 받은 파일은 바로 지움)──► macpro-debian
 ```
 
-## 2. 호출 흐름
-
-### A
-
-```mermaid
-sequenceDiagram
-    actor S as Sun&Moon
-    participant D as dell-debian
-    participant M as macpro-debian
-
-    S->>D: git switch main && git pull
-    S->>D: deploy/build.sh
-    D->>D: main 검사, image 3개 build (tag)
-    S->>D: deploy/send.sh macpro-debian TAG
-    D->>M: SSH: docker save | docker load
-    S->>M: KEDP_IMAGE_TAG=TAG docker compose up -d
-    M->>M: container 교체
-```
-
-### B
-
-```mermaid
-sequenceDiagram
-    actor S as Sun&Moon
-    participant G as GitHub Actions<br/>(build-ghcr)
-    participant R as GHCR<br/>(공개)
-    participant M as macpro-debian
-
-    S->>G: Run workflow (main)
-    G->>G: PR로 merge된 commit인지 확인
-    G->>G: image 3개 build (tag)
-    G->>R: push ghcr.io/schware/kedp-*:TAG
-    G->>R: 최근 5개만 남기고 정리
-    G-->>S: Summary: tag, PR 번호
-    S->>M: docker compose pull (로그인 없이)
-    M->>R: image 3개 요청
-    R-->>M: image 3개
-    S->>M: docker compose up -d
-    M->>M: container 교체
-```
-
-### C
-
-```mermaid
-sequenceDiagram
-    actor S as Sun&Moon
-    participant G as GitHub Actions<br/>(build-artifact)
-    participant F as artifact<br/>(14일)
-    participant D as dell-debian<br/>(GitHub 로그인됨)
-    participant M as macpro-debian
-
-    S->>G: Run workflow (main)
-    G->>G: PR로 merge된 commit인지 확인
-    G->>G: image 3개 build, 묶기 (tag)
-    G->>F: 올리기 kedp-images-TAG
-    G-->>S: Summary: tag, PR 번호
-    S->>D: deploy/send-artifact.sh macpro-debian TAG
-    D->>F: gh run download (로그인 필요)
-    F-->>D: kedp-images-TAG.tar.gz
-    D->>M: SSH: docker load
-    D->>D: 받은 파일 지우기
-    S->>M: KEDP_IMAGE_TAG=TAG docker compose up -d
-    M->>M: container 교체
-```
-
-## 3. 언제 무엇을 쓰나
+## 2. 언제 무엇을 쓰나
 
 | 상황 | 방식 |
 | --- | --- |
@@ -113,14 +33,14 @@ sequenceDiagram
 | dell-debian을 쉬게 하고, 최근 버전 몇 개 안에서 되돌리고 싶다 | **B** |
 | QA까지 확정하고 배포한다. 14일 안에 확정하고, 지나면 되돌리지 않고 고쳐서 새로 만든다 | **C** |
 
-## 4. 세 방식 모두 지키는 규칙
+## 3. 세 방식 모두 지키는 규칙
 
 - PR로 main에 merge된 commit만 배포한다.
 - tag는 그 commit의 짧은 hash 7자리다. 같은 commit이면 A, B, C의 tag가 같다.
 - image 안에 키와 비밀번호는 없다. 키는 macpro-debian의 `.env`에서 넣는다.
 - 비용은 0이다(공개 저장소, 공개 package).
 
-## 5. 실제로 하는 일
+## 4. 실제로 하는 일
 
 ### A
 
@@ -153,7 +73,7 @@ deploy/send-artifact.sh macpro-debian <tag>
 KEDP_IMAGE_TAG=<tag> docker compose up -d
 ```
 
-## 6. 알아 둘 것
+## 5. 알아 둘 것
 
 - C의 artifact가 사라져도 이미 macpro-debian에 받아 둔 image는 그대로 있다.
 - macpro-debian에서 `gh auth login`으로 로그인하면 C도 macpro-debian에서 바로 받을 수 있다. D025는 실행 서버에 GitHub token을 두지 않으려고 dell-debian에서 받기로 정했다. 바꾸려면 D025 결론 5를 고친다.
