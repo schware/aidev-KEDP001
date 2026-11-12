@@ -1,0 +1,176 @@
+name: build-ghcr
+
+# 배포 B: GitHub에서 image 3개를 만들어 GHCR에 올린다(KEDP001-D025).
+# 손으로 실행할 때만 돈다. PR로 main에 merge된 commit만 build한다(결론 9).
+# tag는 그 commit의 짧은 hash(deploy/build.sh와 같은 값). latest는 만들지 않는다.
+# push한 뒤 image마다 최근 5개 버전만 남긴다. 키와 .env는 쓰지 않는다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: 'build할 main commit(hash). 비우면 main 최신 commit'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  packages: write
+  # commit에 연결된 PR을 찾는 데 쓴다(읽기만).
+  pull-requests: read
+
+# 같은 package의 버전 정리가 겹치지 않게 한 번에 하나만 돈다.
+concurrency:
+  group: build-ghcr
+  cancel-in-progress: false
+
+env:
+  IMAGE_PREFIX: ghcr.io/schware/
+  PACKAGE_OWNER: schware
+  KEEP_VERSIONS: 5
+
+# shell을 적으면 pipefail이 켜진다(pipe 중간 실패도 멈춘다).
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check ref is main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::main에서만 실행한다(지금 ${GITHUB_REF})"
+          exit 1
+
+      - name: Checkout main (full history)
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve commit and merged PR
+        id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -eu
+          c=${INPUT_COMMIT:-}
+          if [ -z "$c" ]; then
+            c=$(git rev-parse HEAD)
+          fi
+          case $c in
+            *[!0-9a-fA-F]*) echo "::error::commit은 hash만 쓴다: $c"; exit 1 ;;
+          esac
+          if [ ${#c} -lt 7 ] || [ ${#c} -gt 40 ]; then
+            echo "::error::commit hash는 7~40자다: $c"; exit 1
+          fi
+          sha=$(git rev-parse --verify --quiet "$c^{commit}") || { echo "::error::없는 commit: $c"; exit 1; }
+          git merge-base --is-ancestor "$sha" HEAD || { echo "::error::main에 없는 commit: $sha"; exit 1; }
+
+          # merge된 PR의 merge commit(squash 포함)이어야 한다. PR branch 안의 중간 commit은 받지 않는다.
+          pr=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}/pulls" \
+            --jq "[.[] | select(.merged_at != null and .base.ref == \"main\" and .merge_commit_sha == \"${sha}\") | .number][0] // empty")
+          if [ -z "$pr" ]; then
+            echo "::error::merge된 PR에 연결된 commit이 아니다: $sha"; exit 1
+          fi
+
+          tag=$(git rev-parse --short=7 "$sha")
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
+          echo "commit $sha, tag $tag, PR #$pr"
+
+      - name: Checkout commit
+        env:
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: git checkout --detach "$SHA"
+
+      - name: Log in to GHCR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      # Dockerfile과 build context는 deploy/build.sh와 같다. 하나씩 만든다.
+      # attestation(provenance, sbom)을 붙이지 않아 tag 하나가 package 버전 하나다.
+      - name: Build and push
+        id: build
+        env:
+          TAG: ${{ steps.commit.outputs.tag }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          set -eu
+          src="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          for name in go rust nginx; do
+            image="${IMAGE_PREFIX}kedp-${name}:${TAG}"
+            echo "== $image ($(date '+%H:%M:%S'))"
+            case $name in
+              go) set -- b-go-end ;;
+              rust) set -- --build-context proto=b-proto b-rust-processor ;;
+              nginx) set -- --build-context nginx-conf=deploy/nginx f-ts-end ;;
+            esac
+            docker buildx build --push --provenance=false --sbom=false \
+              --label "org.opencontainers.image.source=$src" \
+              --label "org.opencontainers.image.revision=$SHA" \
+              -t "$image" "$@"
+          done
+
+      - name: Keep latest versions only
+        id: prune
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          : > "$RUNNER_TEMP/deleted.md"
+          for name in go rust nginx; do
+            pkg="kedp-${name}"
+            base="users/${PACKAGE_OWNER}/packages/container/${pkg}/versions"
+            # tag가 있는 버전 중 최근 KEEP_VERSIONS개만 남긴다. tag가 없는 버전(덮어써서 밀려난 것)은 지운다.
+            gh api --paginate "$base?per_page=100" --jq '.[]' |
+              jq -rs --argjson keep "$KEEP_VERSIONS" '
+                (map(select(.metadata.container.tags | length > 0)) | sort_by(.created_at) | reverse | .[:$keep] | map(.id)) as $kept
+                | .[] | select(.id as $id | $kept | index($id) | not)
+                | "\(.id)\t\(.metadata.container.tags | join(",") | if . == "" then "(untagged)" else . end)"' |
+              while IFS="$(printf '\t')" read -r id tags; do
+                gh api -X DELETE "$base/$id" >/dev/null
+                echo "deleted $pkg $tags"
+                echo "| \`${pkg}\` | ${tags} |" >> "$RUNNER_TEMP/deleted.md"
+              done
+          done
+
+      - name: Summary
+        if: always() && steps.commit.outputs.tag != ''
+        env:
+          TAG: ${{ steps.commit.outputs.tag }}
+          SHA: ${{ steps.commit.outputs.sha }}
+          PR: ${{ steps.commit.outputs.pr }}
+          BUILD: ${{ steps.build.outcome }}
+          PRUNE: ${{ steps.prune.outcome }}
+        run: |
+          {
+            echo "## build-ghcr"
+            echo
+            echo "- tag: \`$TAG\`"
+            echo "- commit: \`$SHA\`"
+            echo "- PR: #$PR"
+            echo "- build, push: $BUILD"
+            echo "- 버전 정리: $PRUNE"
+            echo
+            echo "| image |"
+            echo "| --- |"
+            for name in go rust nginx; do
+              echo "| \`${IMAGE_PREFIX}kedp-${name}:${TAG}\` |"
+            done
+            echo
+            echo "### 지운 버전"
+            echo
+            if [ -s "$RUNNER_TEMP/deleted.md" ]; then
+              echo "| package | tag |"
+              echo "| --- | --- |"
+              cat "$RUNNER_TEMP/deleted.md"
+            else
+              echo "없음"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

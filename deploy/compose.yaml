@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   rust:
-    image: kedp-rust:${KEDP_IMAGE_TAG:?KEDP_IMAGE_TAG is not set}
+    image: ${KEDP_IMAGE_PREFIX:-}kedp-rust:${KEDP_IMAGE_TAG:?KEDP_IMAGE_TAG is not set}
     # rust는 API 키를 쓰지 않으므로 .env 전체를 주지 않고 DB 비밀번호만 준다(KEDP001-D012).
     # 주소는 container 구성에 따라 정해진다.
     environment:
@@ -40,7 +40,7 @@ services:
     restart: unless-stopped
 
   go:
-    image: kedp-go:${KEDP_IMAGE_TAG:?KEDP_IMAGE_TAG is not set}
+    image: ${KEDP_IMAGE_PREFIX:-}kedp-go:${KEDP_IMAGE_TAG:?KEDP_IMAGE_TAG is not set}
     env_file: .env
     environment:
       KEDP_DB_HOST: postgres
@@ -63,7 +63,7 @@ services:
     restart: unless-stopped
 
   nginx:
-    image: kedp-nginx:${KEDP_IMAGE_TAG:?KEDP_IMAGE_TAG is not set}
+    image: ${KEDP_IMAGE_PREFIX:-}kedp-nginx:${KEDP_IMAGE_TAG:?KEDP_IMAGE_TAG is not set}
     ports:
       - "${KEDP_HTTP_PORT:-80}:80"
     networks: [kedp]
