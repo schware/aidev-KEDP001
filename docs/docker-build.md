@@ -442,7 +442,7 @@ KEDP001-D025로 배포 방식을 세 가지로 둔다. 배포할 때마다 소�
 
 - **tag는 세 방식 모두 같다.** build한 main commit의 짧은 hash 7자리다(예: `c1bd8ab`). 같은 commit이면 어느 방식으로 만들어도 tag가 같다.
 - **image 안의 내용도 같다.** 같은 Dockerfile과 build context(`proto`, `nginx-conf`)를 쓴다. 키와 비밀번호는 image에 넣지 않는다.
-- C는 따로 만든다(KEDP001-D025 작업 나누기 2). 아직 없으면 A, B만 쓴다.
+- A와 C는 image 이름이 같다(`kedp-go:<tag>`). 실행 서버에서는 똑같이 `docker load`한 image로 띄운다.
 
 ## 12.2 언제 무엇을 쓰나
 
@@ -491,5 +491,58 @@ gh run list --workflow build-ghcr.yml --limit 3
 ```
 
 **소유자가 한 번 할 일:** 첫 실행 뒤 GitHub 프로필 → Packages에서 `kedp-go`, `kedp-rust`, `kedp-nginx`를 각각 Package settings → Change visibility → **Public**으로 바꾼다. 그다음 Settings → Billing에서 Actions, Packages 비용이 0인지 확인한다(KEDP001-D025 결론 8).
+
+배포 순서는 `docs/docker-deploy.md` 7장.
+
+## 12.5 C: `.github/workflows/build-artifact.yml`, `deploy/send-artifact.sh`
+
+### 원칙(KEDP001-D025 결론 5)
+
+- **artifact는 14일 뒤 사라지는 것이 목적이다.** 14일 안에 QA와 확정을 끝낸다.
+- **14일이 지난 버전으로는 되돌리지 않는다.** 문제가 생기면 고친 commit으로 새로 build한다(앞으로 가기).
+- **두 버전이 살아 있게 운영한다.** 지금 운영 중인 버전과 새 버전이다. 새 버전을 build하기 전에 운영 중인 commit을 한 번 다시 build해 artifact를 새로 올린다. 그러면 되돌릴 버전의 14일이 다시 시작된다.
+- **artifact 말고 다른 곳에 사본을 남기지 않는다.** dell-debian은 통로로만 쓰고, 받은 파일은 보낸 뒤 바로 지운다.
+- 같은 commit을 다시 build하면 tag와 소스는 같다. base image가 그사이 갱신되었으면 image 안의 OS 파일은 조금 다를 수 있다.
+
+**왜:** 많은 개발 조직에서 배포는 2주 안에 확정되고, 그보다 늦게 되돌린다면 그것 자체가 이상 신호다. 오래 보관하며 되돌리는 쓰임은 B가 맡는다.
+
+### workflow
+
+| 항목 | 내용 |
+| --- | --- |
+| 실행 | 손으로만(GitHub Actions 화면 → build-artifact → Run workflow, branch는 main) |
+| 입력 `commit` | build할 main commit의 hash. 비우면 main 최신 commit |
+| 검사 | B와 같다. main에서 실행했는지, commit이 main에 있는지, merge된 PR의 merge commit인지 |
+| 권한 | `contents: read`, `pull-requests: read`(commit에 연결된 PR 찾기). artifact 올리기는 권한이 따로 필요 없다 |
+| build | go → rust → nginx를 하나씩. 이름 `kedp-{go,rust,nginx}:<tag>`, Dockerfile, build context는 A와 같다 |
+| 묶기 | `docker save` 3개 \| `gzip` → `kedp-images-<tag>.tar.gz` 하나. 셋이 같이 쓰는 layer는 한 번만 들어간다 |
+| artifact | 이름 `kedp-images-<tag>`, 보관 14일 |
+| 실행 요약 | tag, commit, PR 번호, artifact 이름, 파일 크기 |
+| 쓰지 않는 것 | API 키, `.env` |
+
+```bash
+# dell-debian에서 실행하려면(gh 로그인됨)
+gh workflow run build-artifact.yml --ref main                    # main 최신 commit
+gh workflow run build-artifact.yml --ref main -f commit=<hash>   # 지정한 main commit
+gh run list --workflow build-artifact.yml --limit 3
+```
+
+### `deploy/send-artifact.sh` (dell-debian)
+
+```bash
+deploy/send-artifact.sh macpro-debian <tag>
+```
+
+| 단계 | 하는 일 |
+| --- | --- |
+| tag 검사 | 짧은 hash 7자리(영문 소문자 a~f, 숫자)만 받는다 |
+| artifact 찾기 | 이름이 `kedp-images-<tag>`이고 아직 사라지지 않은 것 중 가장 최근 것. 없으면 "14일이 지났거나 build하지 않은 tag다. 새로 build하라"를 보이고 멈춘다 |
+| 받기 | `gh run download`로 임시 폴더(`mktemp -d`)에 받는다 |
+| 보내기 | send.sh와 같은 방식. 압축한 채 SSH로 보내고 받는 서버에서 `gunzip \| docker load` |
+| 확인 | 받는 서버에 `kedp-{nginx,go,rust}:<tag>` 3개가 있는지 본다 |
+| 지우기 | 임시 폴더를 성공·실패·중단(Ctrl+C)과 상관없이 지운다(`trap ... EXIT`) |
+
+- `gh`는 dell-debian에만 로그인되어 있다. **macpro-debian에는 token을 두지 않는다.** 공개 저장소라도 artifact를 받으려면 로그인이 필요해서 dell-debian을 통로로 쓴다.
+- 받는 서버는 `~/.ssh/config`의 Host 이름으로 준다. 실제 주소는 쓰지 않는다.
 
 배포 순서는 `docs/docker-deploy.md` 7장.

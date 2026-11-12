@@ -1,0 +1,165 @@
+name: build-artifact
+
+# 배포 C: GitHub에서 image 3개를 만들어 묶음 파일 하나를 artifact(14일)로 올린다(KEDP001-D025).
+# 손으로 실행할 때만 돈다. PR로 main에 merge된 commit만 build한다(결론 9).
+# tag는 그 commit의 짧은 hash(deploy/build.sh, build-ghcr와 같은 값).
+# image 이름, Dockerfile, build context는 A(deploy/build.sh)와 같다. 키와 .env는 쓰지 않는다.
+# artifact는 14일 뒤 사라지는 것이 목적이다. 다른 곳에 사본을 남기지 않는다(결론 5).
+# 받기: dell-debian에서 deploy/send-artifact.sh <SSH Host> <tag>
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: 'build할 main commit(hash). 비우면 main 최신 commit'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  # commit에 연결된 PR을 찾는 데 쓴다(읽기만). artifact 올리기는 권한이 따로 필요 없다.
+  pull-requests: read
+
+concurrency:
+  group: build-artifact
+  cancel-in-progress: false
+
+env:
+  RETENTION_DAYS: 14
+
+# shell을 적으면 pipefail이 켜진다(pipe 중간 실패도 멈춘다).
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check ref is main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::main에서만 실행한다(지금 ${GITHUB_REF})"
+          exit 1
+
+      - name: Checkout main (full history)
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      # build-ghcr.yml과 같은 검사다.
+      - name: Resolve commit and merged PR
+        id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -eu
+          c=${INPUT_COMMIT:-}
+          if [ -z "$c" ]; then
+            c=$(git rev-parse HEAD)
+          fi
+          case $c in
+            *[!0-9a-fA-F]*) echo "::error::commit은 hash만 쓴다: $c"; exit 1 ;;
+          esac
+          if [ ${#c} -lt 7 ] || [ ${#c} -gt 40 ]; then
+            echo "::error::commit hash는 7~40자다: $c"; exit 1
+          fi
+          sha=$(git rev-parse --verify --quiet "$c^{commit}") || { echo "::error::없는 commit: $c"; exit 1; }
+          git merge-base --is-ancestor "$sha" HEAD || { echo "::error::main에 없는 commit: $sha"; exit 1; }
+
+          # merge된 PR의 merge commit(squash 포함)이어야 한다. PR branch 안의 중간 commit은 받지 않는다.
+          pr=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}/pulls" \
+            --jq "[.[] | select(.merged_at != null and .base.ref == \"main\" and .merge_commit_sha == \"${sha}\") | .number][0] // empty")
+          if [ -z "$pr" ]; then
+            echo "::error::merge된 PR에 연결된 commit이 아니다: $sha"; exit 1
+          fi
+
+          tag=$(git rev-parse --short=7 "$sha")
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
+          echo "name=kedp-images-$tag" >> "$GITHUB_OUTPUT"
+          echo "commit $sha, tag $tag, PR #$pr"
+
+      - name: Checkout commit
+        env:
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: git checkout --detach "$SHA"
+
+      # deploy/build.sh와 같은 이름, Dockerfile, build context. 하나씩 만든다.
+      - name: Build
+        id: build
+        env:
+          TAG: ${{ steps.commit.outputs.tag }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          set -eu
+          src="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          for name in go rust nginx; do
+            image="kedp-${name}:${TAG}"
+            echo "== $image ($(date '+%H:%M:%S'))"
+            case $name in
+              go) set -- b-go-end ;;
+              rust) set -- --build-context proto=b-proto b-rust-processor ;;
+              nginx) set -- --build-context nginx-conf=deploy/nginx f-ts-end ;;
+            esac
+            docker buildx build --load --provenance=false --sbom=false \
+              --label "org.opencontainers.image.source=$src" \
+              --label "org.opencontainers.image.revision=$SHA" \
+              -t "$image" "$@"
+          done
+
+      # send.sh처럼 3개를 한 tar로 묶는다. 셋이 같이 쓰는 layer는 한 번만 들어간다.
+      - name: Save images
+        id: save
+        env:
+          TAG: ${{ steps.commit.outputs.tag }}
+          NAME: ${{ steps.commit.outputs.name }}
+        run: |
+          set -eu
+          dir="$RUNNER_TEMP/artifact"
+          mkdir -p "$dir"
+          file="$dir/$NAME.tar.gz"
+          docker save "kedp-nginx:$TAG" "kedp-go:$TAG" "kedp-rust:$TAG" | gzip -6 > "$file"
+          gzip -t "$file"
+          bytes=$(stat -c %s "$file")
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+          echo "size=$(numfmt --to=iec --suffix=B "$bytes") ($bytes bytes)" >> "$GITHUB_OUTPUT"
+          ls -l "$file"
+
+      # 이미 gzip이므로 다시 압축하지 않는다. zip으로 감싸 두어(archive 기본값) gh run download가 풀어 준다.
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.commit.outputs.name }}
+          path: ${{ steps.save.outputs.file }}
+          retention-days: ${{ env.RETENTION_DAYS }}
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: Summary
+        if: always() && steps.commit.outputs.tag != ''
+        env:
+          TAG: ${{ steps.commit.outputs.tag }}
+          SHA: ${{ steps.commit.outputs.sha }}
+          PR: ${{ steps.commit.outputs.pr }}
+          NAME: ${{ steps.commit.outputs.name }}
+          SIZE: ${{ steps.save.outputs.size }}
+          BUILD: ${{ steps.build.outcome }}
+          SAVE: ${{ steps.save.outcome }}
+        run: |
+          {
+            echo "## build-artifact"
+            echo
+            echo "- tag: \`$TAG\`"
+            echo "- commit: \`$SHA\`"
+            echo "- PR: #$PR"
+            echo "- artifact: \`$NAME\` (보관 ${RETENTION_DAYS}일)"
+            echo "- 파일: \`$NAME.tar.gz\`, ${SIZE:-없음}"
+            echo "- build: $BUILD, save: $SAVE"
+            echo "- image: \`kedp-go:$TAG\`, \`kedp-rust:$TAG\`, \`kedp-nginx:$TAG\`"
+            echo
+            echo "받기(dell-debian): \`deploy/send-artifact.sh macpro-debian $TAG\`"
+          } >> "$GITHUB_STEP_SUMMARY"
