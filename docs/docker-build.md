@@ -3,6 +3,7 @@
 이 문서는 **image를 만들고(build) 실행 서버로 보내는 과정**을 자세히 설명한다.
 - 대상 파일: `deploy/build.sh`, Dockerfile 3개, `.dockerignore`, `deploy/send.sh`
 - 서버에서 띄우기, 백업, 되돌리기: `docs/docker-deploy.md`
+- 배포 방식은 세 가지다(A, B, C). 이 문서의 1~11장은 A다. 비교와 PR 중심 배포 규칙은 12장(KEDP001-D025)
 
 ---
 
@@ -56,7 +57,10 @@ deploy/build.sh                 # 3개 모두, tag는 git hash
 deploy/build.sh 17a8351         # 3개 모두, tag를 직접 줌
 deploy/build.sh 17a8351 nginx   # nginx만 다시 만듦
 deploy/build.sh "" go           # go만, tag는 git hash
+deploy/build.sh --allow-branch  # 시험용: branch나 -dirty에서도 만든다. 배포하지 않는다
 ```
+
+**main에 merge된 commit에서만 만든다(KEDP001-D025 결론 9).** 지금 commit이 `origin/main`에 없거나 commit하지 않은 변경이 있으면 멈춘다. `--allow-branch`는 맨 앞에 붙인다.
 
 ## 3.2 내용
 
@@ -71,6 +75,26 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 ```
 - 스크립트가 있는 `deploy/`의 한 단계 위, 곧 저장소 맨 위 폴더를 `root`로 잡는다.
 - 그래서 어느 폴더에서 실행해도 경로가 맞는다.
+
+```sh
+allow_branch=
+if [ "${1:-}" = --allow-branch ]; then
+	allow_branch=1
+	shift
+fi
+
+problem=
+git -C "$root" merge-base --is-ancestor HEAD origin/main 2>/dev/null ||
+	problem="commit ... is not in origin/main (git switch main && git pull)"
+[ -z "$(git -C "$root" status --porcelain)" ] ||
+	problem="${problem:+$problem; }uncommitted changes (git status)"
+```
+- **main 검사.** 배포할 수 있는 것은 PR에서 CI가 통과하고 main에 merge된 commit뿐이다(KEDP001-D025 결론 9).
+- `merge-base --is-ancestor HEAD origin/main`: 지금 commit이 `origin/main`에 들어 있는지 본다. main의 예전 commit(되돌리기용)도 통과한다.
+- `status --porcelain`: commit하지 않은 변경이 있는지 본다. 있으면 tag에 `-dirty`가 붙는 상태다.
+- 하나라도 걸리면 `stop: ...`을 보이고 멈춘다. `--allow-branch`를 붙이면 `WARNING`만 보이고 만든다. 이 image는 시험용이고 배포하지 않는다.
+- `origin/main`은 마지막 `git pull`(또는 `git fetch`) 때의 main이다. 방금 merge한 commit이 걸리면 `git pull`부터 한다.
+- 2026-11-08에 pull하지 않은 채 PR branch에서 실행해 그 commit(`ff670bf`)으로 image가 만들어진 일이 있었다. 이 검사가 그것을 막는다.
 
 ```sh
 tag=${1:-}
@@ -377,7 +401,9 @@ DB 구조(migration)가 바뀌는 배포는 `docs/docker-deploy.md` 7장 순서�
 | --- | --- | --- |
 | build 중 dell-debian이 느려지거나 멈춤 | 메모리 부족. Rust compile이 가장 많이 쓴다 | 다른 Claude Code, docker 작업을 멈추고 하나씩 만든다(`deploy/build.sh "" rust`) |
 | `invalid tag` | tag에 쓸 수 없는 글자 | 영문, 숫자, `_ . -`만 쓴다 |
-| tag 끝에 `-dirty` | commit하지 않은 변경이 있다 | `git status` 확인. 배포용이면 정리한 뒤 다시 만든다 |
+| `stop: commit ... is not in origin/main` | branch에 있거나 pull하지 않았다 | `git switch main && git pull` 뒤 다시 만든다. 시험용이면 `--allow-branch` |
+| `stop: uncommitted changes` | commit하지 않은 변경이 있다 | `git status` 확인. 정리한 뒤 다시 만든다. 시험용이면 `--allow-branch` |
+| tag 끝에 `-dirty` | `--allow-branch`로 변경이 있는 채 만들었다 | 시험용 image다. 배포하지 않는다 |
 | `no image: kedp-...` (send.sh) | 그 tag로 만들지 않은 image가 있다 | `docker image ls 'kedp-*'`로 확인하고 빠진 것만 만든다 |
 | `npm ci` 실패 | `package-lock.json`이 `package.json`과 맞지 않는다 | f-ts-end에서 `npm install`로 lock을 맞추고 commit한다 |
 | `cargo build --locked` 실패 | `Cargo.lock`이 `Cargo.toml`과 맞지 않는다 | b-rust-processor에서 `cargo build`로 lock을 맞추고 commit한다 |
@@ -395,3 +421,75 @@ docker build --platform linux/amd64 -t kedp-go:<tag> b-go-end
 ```
 
 Mac에서 만든 image를 Mac에서 바로 돌릴 때는 필요 없다.
+
+---
+
+# 12. 세 가지 배포 방식
+
+KEDP001-D025로 배포 방식을 세 가지로 둔다. 배포할 때마다 소유자가 하나를 고른다. **A가 기본이다.**
+
+## 12.1 비교
+
+| | A. dell-debian build | B. GitHub build + GHCR | C. GitHub build + artifact |
+| --- | --- | --- | --- |
+| image 만드는 곳 | dell-debian(`deploy/build.sh`) | GitHub Actions(`build-ghcr.yml`) | GitHub Actions(`build-artifact.yml`) |
+| 옮기는 방법 | `docker save` → SSH → `docker load`(`deploy/send.sh`) | GHCR에 push, macpro-debian이 `docker pull` | artifact로 올리고, dell-debian이 받아 SSH → `docker load` |
+| image 이름 | `kedp-go:<tag>` | `ghcr.io/schware/kedp-go:<tag>` | `kedp-go:<tag>` |
+| `.env`의 `KEDP_IMAGE_PREFIX` | 비움 | `ghcr.io/schware/` | 비움 |
+| 보관 | 서버에 남은 image | GHCR에 image마다 최근 5개 버전 | artifact 14일, 운영 중 + 새 버전 2개 |
+| dell-debian 부담 | Rust compile(작업을 멈춘다) | 없음 | 받아서 보내기만 |
+| 실행 서버의 비밀 | 없음 | 없음(package 공개) | 없음(dell-debian을 통로로) |
+
+- **tag는 세 방식 모두 같다.** build한 main commit의 짧은 hash 7자리다(예: `c1bd8ab`). 같은 commit이면 어느 방식으로 만들어도 tag가 같다.
+- **image 안의 내용도 같다.** 같은 Dockerfile과 build context(`proto`, `nginx-conf`)를 쓴다. 키와 비밀번호는 image에 넣지 않는다.
+- C는 따로 만든다(KEDP001-D025 작업 나누기 2). 아직 없으면 A, B만 쓴다.
+
+## 12.2 언제 무엇을 쓰나
+
+| 상황 | 방식 |
+| --- | --- |
+| 평소. 개발 서버에서 바로 만들어 보낸다 | **A** |
+| dell-debian에서 Rust compile을 돌리고 싶지 않다. 지난 버전 몇 개 안에서 되돌릴 수 있게 둔다 | **B** |
+| QA까지 확정하고 배포한다. 되돌리기를 최소로 하고 14일 안에 확정한다 | **C** |
+
+한 방식에 문제가 생기면 같은 tag를 다른 방식으로 만들어 쓸 수 있다.
+
+## 12.3 PR 중심 배포 규칙(결론 9)
+
+**PR로 main에 merge된 commit만 배포한다. branch별 배포는 하지 않는다.** 세 방식 모두 같다.
+
+- 배포할 수 있는 것: PR에서 CI(test, secret-scan)가 통과하고 main에 merge된 commit
+- main 보호 설정(소유자): main에 직접 push를 막고, PR과 CI 통과를 merge 조건으로 둔다
+- A: `deploy/build.sh`가 `origin/main`에 없는 commit, `-dirty`에서 멈춘다(3장). 시험용 branch image는 `--allow-branch`로만 만들고 배포하지 않는다
+- B, C: workflow가 실행할 commit이 main에 있고 merge된 PR의 commit인지 확인한다. 아니면 멈춘다. 실행 요약에 PR 번호를 적는다
+- tag가 main commit의 hash라서, tag만 보고 main 어디에서 만든 버전인지 안다
+
+**왜:** 배포한 버전마다 PR(무엇을, 왜 바꿨는지)과 CI 결과가 함께 남는다. branch image가 운영에 올라가면 main에 없는 코드가 돌고, 무엇이 운영 중인지 기록으로 추적할 수 없다.
+
+## 12.4 B: `.github/workflows/build-ghcr.yml`
+
+| 항목 | 내용 |
+| --- | --- |
+| 실행 | 손으로만(GitHub Actions 화면 → build-ghcr → Run workflow, branch는 main). main push마다 돌지 않는다 |
+| 입력 `commit` | build할 main commit의 hash. 비우면 main 최신 commit |
+| 검사 | main에서 실행했는지, commit이 main에 있는지, merge된 PR의 merge commit(squash 포함)인지. 아니면 멈춘다 |
+| 권한 | `contents: read`, `packages: write`, `pull-requests: read`(commit에 연결된 PR 찾기). GHCR 로그인은 `GITHUB_TOKEN` |
+| build | go → rust → nginx를 하나씩. Dockerfile, build context는 `deploy/build.sh`와 같다 |
+| image | `ghcr.io/schware/kedp-go`, `kedp-rust`, `kedp-nginx` `:<tag>`. `latest`는 만들지 않는다 |
+| label | `org.opencontainers.image.source`(저장소와 package를 잇는다), `org.opencontainers.image.revision`(commit) |
+| 보관 | push한 뒤 image마다 tag 있는 최근 5개 버전만 남기고 나머지(같은 tag를 다시 올려 밀려난 버전 포함)를 지운다 |
+| 실행 요약 | tag, commit, PR 번호, image 3개 이름, 지운 버전 |
+| 쓰지 않는 것 | API 키, `.env` |
+
+같은 commit으로 다시 실행하면 같은 tag를 덮어쓴다.
+
+```bash
+# dell-debian에서 실행하려면(gh 로그인됨)
+gh workflow run build-ghcr.yml --ref main                       # main 최신 commit
+gh workflow run build-ghcr.yml --ref main -f commit=<hash>      # 지정한 main commit
+gh run list --workflow build-ghcr.yml --limit 3
+```
+
+**소유자가 한 번 할 일:** 첫 실행 뒤 GitHub 프로필 → Packages에서 `kedp-go`, `kedp-rust`, `kedp-nginx`를 각각 Package settings → Change visibility → **Public**으로 바꾼다. 그다음 Settings → Billing에서 Actions, Packages 비용이 0인지 확인한다(KEDP001-D025 결론 8).
+
+배포 순서는 `docs/docker-deploy.md` 7장.

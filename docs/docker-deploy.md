@@ -493,6 +493,52 @@ docker compose ps && docker compose logs --tail 20 go
 - 관리자 session은 go 메모리에 있으므로 go가 새로 뜨면 다시 로그인한다.
 - 옛 image는 되돌릴 때 쓰므로 바로 지우지 않는다. 몇 번 배포한 뒤 `docker image rm kedp-go:<옛 tag> kedp-rust:<옛 tag> kedp-nginx:<옛 tag>`.
 
+위 순서는 A(dell-debian build)다. 배포 방식은 세 가지이고 A가 기본이다. 어느 방식이든 **PR로 main에 merge된 commit만 배포한다**(KEDP001-D025, `docs/docker-build.md` 12장).
+
+### B: GitHub build + GHCR
+
+image를 GitHub Actions가 만들어 GHCR에 올리고, macpro-debian이 직접 받는다. dell-debian에서 build하지 않는다.
+
+```text
+ GitHub                                         macpro-debian
+ ──────                                         ─────────────
+ build-ghcr workflow 실행 → 새 tag
+ ghcr.io/schware/kedp-*:<새 tag>  ──pull──►     .env: KEDP_IMAGE_PREFIX=ghcr.io/schware/
+                                                     KEDP_IMAGE_TAG=<새 tag>
+                                                docker compose pull → up -d
+```
+
+```bash
+# 1) GitHub: Actions → build-ghcr → Run workflow(branch main, commit은 비우면 main 최신)
+#    dell-debian에서: gh workflow run build-ghcr.yml --ref main
+#    끝나면 실행 요약(Summary)의 tag, PR 번호를 본다
+
+# 2) dell-debian: compose.yaml, backup.sh가 바뀌었을 때만
+scp deploy/compose.yaml deploy/backup.sh macpro-debian:/srv/projects/kedp/
+
+# 3) macpro-debian
+cd /srv/projects/kedp
+grep -q '^KEDP_IMAGE_PREFIX=' .env || echo 'KEDP_IMAGE_PREFIX=' >> .env      # 처음 한 번
+sed -i 's#^KEDP_IMAGE_PREFIX=.*#KEDP_IMAGE_PREFIX=ghcr.io/schware/#' .env
+sed -i 's/^KEDP_IMAGE_TAG=.*/KEDP_IMAGE_TAG=<새 tag>/' .env
+docker compose pull go rust nginx
+docker compose up -d
+docker compose ps && docker compose logs --tail 20 go
+```
+
+- package가 공개(Public)라서 `docker login` 없이 받는다. macpro-debian에 token을 두지 않는다.
+- `pull`이 `denied`나 `not found`이면: package가 아직 공개가 아니거나, 그 tag가 GHCR에 없다(5개 보관에서 지워졌거나 workflow가 실패).
+- **되돌리기:** `KEDP_IMAGE_TAG`만 이전 tag로 바꾸고 `docker compose pull` → `up -d`. GHCR에 남은 최근 5개 안에서 되돌린다.
+- **A로 돌아가기:** `KEDP_IMAGE_PREFIX=`로 비우고 A 순서대로 한다.
+- **macpro-debian의 B image도 GHCR와 같은 5개 tag만 남긴다.** 배포한 뒤 GHCR에 없는 tag는 지운다.
+
+```bash
+docker images 'ghcr.io/schware/kedp-*'
+docker image rm ghcr.io/schware/kedp-go:<옛 tag> ghcr.io/schware/kedp-rust:<옛 tag> ghcr.io/schware/kedp-nginx:<옛 tag>
+```
+
+DB 구조가 바뀌는 배포는 B도 아래 "migration" 순서를 따른다. `KEDP_IMAGE_TAG`를 바꾼 뒤 `docker compose pull`을 먼저 한다.
+
 ### 되돌리기
 
 tag만 이전 것으로 바꾼다.
