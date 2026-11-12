@@ -539,6 +539,51 @@ docker image rm ghcr.io/schware/kedp-go:<옛 tag> ghcr.io/schware/kedp-rust:<옛
 
 DB 구조가 바뀌는 배포는 B도 아래 "migration" 순서를 따른다. `KEDP_IMAGE_TAG`를 바꾼 뒤 `docker compose pull`을 먼저 한다.
 
+### C: GitHub build + artifact
+
+image를 GitHub Actions가 만들어 artifact(14일)로 올린다. dell-debian이 받아 SSH로 macpro-debian에 load한다. **QA까지 14일 안에 확정하고, 운영 중 버전과 새 버전 두 개를 살려 둔다**(`docs/docker-build.md` 12.5).
+
+```text
+ GitHub                         dell-debian (통로)                 macpro-debian
+ ──────                         ──────────────────                 ─────────────
+ ① 운영 중 commit build ┐
+ ② 새 commit build      ┴→ artifact kedp-images-<tag> (14일)
+                            ③ send-artifact.sh ── gunzip | docker load ──►  kedp-*:<새 tag>
+                               (받은 파일은 바로 지움)            ④ .env tag → up -d
+                                                                  ⑤ 두 tag만 남김
+```
+
+```bash
+# 1) GitHub: 지금 운영 중인 commit으로 workflow 실행(되돌릴 버전의 artifact를 새로 올려 14일을 다시 시작)
+#    macpro-debian의 .env에서 지금 KEDP_IMAGE_TAG를 확인한 뒤
+gh workflow run build-artifact.yml --ref main -f commit=<운영 중 tag>
+
+# 2) GitHub: 새 commit으로 workflow 실행(비우면 main 최신 commit)
+gh workflow run build-artifact.yml --ref main
+gh run list --workflow build-artifact.yml --limit 3     # 둘 다 success인지. 실행 요약에서 새 tag를 본다
+
+# 3) dell-debian
+deploy/send-artifact.sh macpro-debian <새 tag>
+scp deploy/compose.yaml deploy/backup.sh macpro-debian:/srv/projects/kedp/    # 이 두 파일이 바뀌었을 때만
+
+# 4) macpro-debian: PREFIX는 비운다(A와 같은 image 이름)
+cd /srv/projects/kedp
+sed -i 's#^KEDP_IMAGE_PREFIX=.*#KEDP_IMAGE_PREFIX=#' .env
+sed -i 's/^KEDP_IMAGE_TAG=.*/KEDP_IMAGE_TAG=<새 tag>/' .env
+docker compose up -d
+docker compose ps && docker compose logs --tail 20 go
+
+# 5) macpro-debian: C의 image는 두 tag(새 tag, 직전 tag)만 남기고 지운다
+docker images 'kedp-*'
+docker image rm kedp-go:<더 옛 tag> kedp-rust:<더 옛 tag> kedp-nginx:<더 옛 tag>
+```
+
+- 1)은 운영 중 버전을 처음 C로 배포하는 경우에도 한다. 그 tag의 image가 macpro-debian에 이미 있으면 3)에서 보내지 않아도 된다.
+- **되돌리기:** 직전 tag가 macpro-debian에 남아 있으므로 `KEDP_IMAGE_TAG`만 직전 tag로 바꾸고 `docker compose up -d`. 그 image가 없으면 직전 tag artifact가 14일 안에 있을 때만 `deploy/send-artifact.sh macpro-debian <직전 tag>`로 다시 받는다.
+- **14일이 지났으면** 되돌리지 않는다. 고친 commit을 PR로 merge하고 2)부터 새로 한다.
+- `send-artifact.sh`가 `no artifact`로 멈추면: 14일이 지났거나, 그 tag로 workflow를 실행하지 않았거나, 실행이 실패했다.
+- DB 구조가 바뀌는 배포는 C도 아래 "migration" 순서를 따른다. 3)까지 한 뒤 migration 순서로 들어간다.
+
 ### 되돌리기
 
 tag만 이전 것으로 바꾼다.
