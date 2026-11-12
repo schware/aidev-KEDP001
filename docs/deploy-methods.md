@@ -16,6 +16,8 @@
 
 ## 2. 흐름
 
+tag 값은 2026-11 실제로 쓴 값이다. A `c1bd8ab`(#77 merge), B `cab9c05`(#82 merge, PR #85), C `8ee99f4`(#83 merge, PR #86). 다음 배포 때는 그때의 main commit hash가 tag가 된다.
+
 ### A. dell-debian build
 
 ```text
@@ -24,13 +26,13 @@
      ▼
  dell-debian
    ① git switch main && git pull
-   ② deploy/build.sh            main 검사 → image 3개 build (tag = commit hash)
-   ③ deploy/send.sh macpro-debian <tag>
+   ② deploy/build.sh            main 검사 → image 3개 build (tag = commit hash → c1bd8ab)
+   ③ deploy/send.sh macpro-debian c1bd8ab
      │
      │  SSH  (docker save → gzip → docker load)
      ▼
  macpro-debian
-   ④ KEDP_IMAGE_TAG=<tag> docker compose up -d
+   ④ KEDP_IMAGE_TAG=c1bd8ab docker compose up -d
 ```
 
 ### B. GitHub build + GHCR
@@ -41,20 +43,20 @@
      ▼
  GitHub Actions (build-ghcr)              ← Run workflow를 눌러야 돈다
    ① PR로 merge된 commit인지 확인
-   ② image 3개 build (tag = commit hash)
+   ② image 3개 build (tag = commit hash → cab9c05)
    ③ GHCR에 push
    ④ 최근 5개만 남기고 정리
    ⑤ Summary에 tag, PR 번호
      │
      ▼
- GHCR  ghcr.io/schware/kedp-*:<tag>       ← 공개, 로그인 없이 누구나 받음
+ GHCR  ghcr.io/schware/kedp-*:cab9c05       ← 공개, 로그인 없이 누구나 받음
      ▲
      │  docker pull
      │
  macpro-debian
    ⑥ curl … compose.yaml                  (compose.yaml이 바뀌었을 때만)
-   ⑦ KEDP_IMAGE_PREFIX=ghcr.io/schware/ KEDP_IMAGE_TAG=<tag> docker compose pull go rust nginx
-   ⑧ KEDP_IMAGE_PREFIX=ghcr.io/schware/ KEDP_IMAGE_TAG=<tag> docker compose up -d
+   ⑦ KEDP_IMAGE_PREFIX=ghcr.io/schware/ KEDP_IMAGE_TAG=cab9c05 docker compose pull go rust nginx
+   ⑧ KEDP_IMAGE_PREFIX=ghcr.io/schware/ KEDP_IMAGE_TAG=cab9c05 docker compose up -d
 ```
 
 ### C. GitHub build + artifact
@@ -65,23 +67,23 @@
      ▼
  GitHub Actions (build-artifact)          ← Run workflow를 눌러야 돈다
    ① PR로 merge된 commit인지 확인
-   ② image 3개 build, 파일 하나로 묶기 (tag = commit hash)
-   ③ artifact로 올리기  kedp-images-<tag>
+   ② image 3개 build, 파일 하나로 묶기 (tag = commit hash → 8ee99f4)
+   ③ artifact로 올리기  kedp-images-8ee99f4
    ④ Summary에 tag, PR 번호
      │
      ▼
- artifact  kedp-images-<tag>.tar.gz       ← 14일 뒤 사라짐, GitHub 로그인한 곳에서 받음
+ artifact  kedp-images-8ee99f4.tar.gz       ← 14일 뒤 사라짐, GitHub 로그인한 곳에서 받음
      ▲
      │  gh run download (로그인 필요)
      │
  dell-debian (GitHub에 로그인됨)
-   ⑤ deploy/send-artifact.sh macpro-debian <tag>
+   ⑤ deploy/send-artifact.sh macpro-debian 8ee99f4
         받기 → SSH로 보내기 → 받은 파일 지우기
      │
      │  SSH  (docker load)
      ▼
  macpro-debian
-   ⑥ KEDP_IMAGE_TAG=<tag> docker compose up -d
+   ⑥ KEDP_IMAGE_TAG=8ee99f4 docker compose up -d
 ```
 ## 3. 언제 무엇을 쓰나
 
