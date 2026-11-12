@@ -105,3 +105,24 @@ tag 값은 2026-11 실제로 쓴 값이다. A `c1bd8ab`(#77 merge), B `cab9c05`(
 - C의 artifact가 사라져도 이미 macpro-debian에 받아 둔 image는 그대로 있다.
 - macpro-debian에서 `gh auth login`으로 로그인하면 C도 macpro-debian에서 바로 받을 수 있다. D025는 실행 서버에 GitHub token을 두지 않으려고 dell-debian에서 받기로 정했다. 바꾸려면 D025 결론 5를 고친다.
 - 명령 앞에 `KEDP_IMAGE_TAG=<tag>`를 붙이면 `.env`를 고치지 않고 그 실행에만 쓴다. 값 없이 `docker compose up -d`를 하면 `.env`에 적힌 버전으로 뜬다.
+
+## 6. 처음 한 번 하는 GitHub 설정
+
+배포 방식 B, C를 처음 갖출 때 한 번만 한다. KEDP001은 2026-11-12에 모두 끝냈다.
+
+1. **Actions 등록**
+   - `.github/workflows/`에 yml 파일을 넣고 PR로 main에 merge하면 GitHub 저장소 → Actions 왼쪽 목록에 자동으로 생긴다. 따로 등록 버튼은 없다.
+   - KEDP001의 workflow: `test`, `secret-scan`(PR과 main merge 때 자동), `build-ghcr`, `build-artifact`(Run workflow를 눌러야 돈다)
+   - 목록에 안 보이면 페이지를 새로 고친다.
+2. **main 보호 설정(ruleset)**
+   - Settings → Rules → Rulesets → New branch ruleset
+   - Enforcement `Active`, Bypass list 비움, Target `Include default branch`(main)
+   - Require a pull request before merging(approvals 0), Require status checks to pass(`go`, `rust`, `web`, `gitleaks`, source는 GitHub Actions)
+   - 공개 저장소라 무료다.
+3. **B의 package 공개**
+   - build-ghcr를 처음 실행한 뒤 프로필 → Packages(또는 저장소 Code 화면 오른쪽 Packages)에서 `kedp-go`, `kedp-rust`, `kedp-nginx`
+   - 각각 Package settings → Danger Zone → Change visibility → Public
+4. **비용 확인**
+   - 프로필 → Settings → Billing and licensing에서 Actions, Packages가 0원인지 본다.
+5. **C를 받는 곳의 로그인**
+   - artifact를 받을 서버에서 `gh auth login`을 한다. 지금은 dell-debian이다.
