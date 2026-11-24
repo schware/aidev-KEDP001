@@ -48,13 +48,7 @@ impl Config {
     /// env_path의 .env 파일과 환경 변수에서 설정을 읽는다. 파일이 없어도 오류가 아니다.
     pub fn load(env_path: &Path) -> Result<Config, String> {
         let file = read_env_file(env_path)?;
-        // 환경 변수가 비어 있지 않으면 환경 변수, 아니면 .env 파일 값
-        let get = |name: &str| -> Option<String> {
-            match std::env::var(name) {
-                Ok(v) if !v.is_empty() => Some(v),
-                _ => file.get(name).filter(|v| !v.is_empty()).cloned(),
-            }
-        };
+        let get = |name: &str| get_from(&file, name);
         let require = |name: &str| get(name).ok_or_else(|| format!("{name} is not set"));
 
         let addr = get(ADDR_VAR)
@@ -73,6 +67,19 @@ impl Config {
                 password: require(DB_PASSWORD_VAR)?,
             },
         })
+    }
+}
+
+/// env_path의 .env 파일과 환경 변수에서 name 하나를 읽는다(Config::load와 같은 규칙). 없거나 비었으면 None이다.
+pub fn lookup(env_path: &Path, name: &str) -> Result<Option<String>, String> {
+    Ok(get_from(&read_env_file(env_path)?, name))
+}
+
+/// 환경 변수가 비어 있지 않으면 환경 변수, 아니면 .env 파일 값이다.
+fn get_from(file: &HashMap<String, String>, name: &str) -> Option<String> {
+    match std::env::var(name) {
+        Ok(v) if !v.is_empty() => Some(v),
+        _ => file.get(name).filter(|v| !v.is_empty()).cloned(),
     }
 }
 
@@ -120,6 +127,20 @@ mod tests {
         assert_eq!(env.get("C").map(String::as_str), Some("3"));
         assert_eq!(env.get("D").map(String::as_str), Some(""));
         assert_eq!(env.len(), 4);
+    }
+
+    #[test]
+    fn lookup_reads_env_file() {
+        let path =
+            std::env::temp_dir().join(format!("kedp-config-test-{}.env", std::process::id()));
+        std::fs::write(&path, "KEDP_TEST_ONLY_LEVEL=DEBUG\nKEDP_TEST_ONLY_EMPTY=\n").unwrap();
+        let got = lookup(&path, "KEDP_TEST_ONLY_LEVEL");
+        let empty = lookup(&path, "KEDP_TEST_ONLY_EMPTY");
+        let missing = lookup(&path.with_extension("none"), "KEDP_TEST_ONLY_LEVEL");
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(got, Ok(Some("DEBUG".to_string())));
+        assert_eq!(empty, Ok(None));
+        assert_eq!(missing, Ok(None));
     }
 
     #[test]
