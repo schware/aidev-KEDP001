@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/logx"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/store"
 )
 
@@ -57,6 +57,7 @@ func Next(clock string, now time.Time) (time.Time, error) {
 // 수집 시각(app_setting collect_time)은 tick마다 DB에서 다시 읽으므로, 바뀌면 다음 수집부터 따른다.
 // 시작했을 때 오늘 수집 시각이 이미 지났으면 다음 날부터 수집한다.
 // 수집이 실패해도(DB, Rust 오류 포함) 기록만 하고 다음 수집 시각을 기다린다.
+// 확인할 때마다 schedule.tick(DEBUG), 다음 수집 시각이 정해지면 schedule.next(INFO)를 남긴다(KEDP001-D026 4장).
 func (c *Collector) Schedule(ctx context.Context, tick time.Duration) error {
 	ticker := time.NewTicker(tick)
 	defer ticker.Stop()
@@ -71,34 +72,35 @@ func (c *Collector) Schedule(ctx context.Context, tick time.Duration) error {
 		now := c.now()
 		v, err := c.Store.CollectTime(ctx)
 		if err != nil {
-			log.Printf("schedule: %v", err)
+			if errors.Is(ctx.Err(), context.Canceled) {
+				return nil
+			}
+			logx.Error(ctx, "schedule.tick", "err", err.Error())
 			continue // prev를 그대로 두어, DB가 돌아오면 지나간 수집 시각을 놓치지 않는다
 		}
 		if v != clock {
-			if next, err := Next(v, now); err == nil {
-				log.Printf("schedule: collect_time %s, next %s", v, next.Format(time.DateTime+" MST"))
-			}
+			logNext(ctx, v, now)
 			clock = v
 		}
 		due, err := Due(v, prev, now)
 		if err != nil {
-			log.Printf("schedule: %v", err)
+			logx.Error(ctx, "schedule.tick", "collect_time", v, "err", err.Error())
 			prev = now
 			continue
 		}
 		prev = now
+		logx.Debug(ctx, "schedule.tick", "collect_time", v, "due", due)
 		if !due {
 			continue
 		}
-		log.Printf("schedule: collection started")
-		sum, err := c.Run(ctx, store.TriggerSchedule)
-		if err != nil && !errors.Is(err, context.Canceled) {
-			log.Printf("schedule: collection failed: %v (%s)", err, sum)
-		} else {
-			log.Printf("schedule: collection finished (%s)", sum)
-		}
-		if next, err := Next(v, c.now()); err == nil {
-			log.Printf("schedule: next %s", next.Format(time.DateTime+" MST"))
-		}
+		_, _ = c.Run(ctx, store.TriggerSchedule) // 결과는 Run이 collect.finish로 남긴다
+		logNext(ctx, v, c.now())
+	}
+}
+
+// logNext는 다음 수집 시각을 schedule.next로 남긴다.
+func logNext(ctx context.Context, clock string, now time.Time) {
+	if next, err := Next(clock, now); err == nil {
+		logx.Info(ctx, "schedule.next", "collect_time", clock, "at", next.Format(time.RFC3339))
 	}
 }

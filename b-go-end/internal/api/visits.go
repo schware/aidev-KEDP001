@@ -5,13 +5,13 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
-	"log"
 	"net/http"
 	"net/netip"
 	"sync"
 	"time"
 
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/admin"
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/logx"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/store"
 )
 
@@ -167,7 +167,7 @@ func (c *visitors) mark(day string, ip netip.Addr, ua string) ([sha256.Size]byte
 	if len(c.seen) >= c.limit {
 		if !c.full {
 			c.full = true
-			log.Printf("api: visits: %d visitors reached for %s; not counting more today", c.limit, day)
+			logx.Warn(context.Background(), "visit.limit", "limit", c.limit, "day", day)
 		}
 		return key, false, nil
 	}

@@ -245,3 +245,15 @@ func TestLoadAdminInvalid(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadLogLevel(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "none")
+	t.Setenv("KEDP_LOG_LEVEL", "")
+	if v, err := LoadLogLevel(missing); err != nil || v != "" {
+		t.Errorf("default = %q, %v", v, err)
+	}
+	t.Setenv("KEDP_LOG_LEVEL", "DEBUG")
+	if v, err := LoadLogLevel(missing); err != nil || v != "DEBUG" {
+		t.Errorf("env = %q, %v", v, err)
+	}
+}

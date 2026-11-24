@@ -16,7 +16,7 @@
 //	POST /api/admin/visits/reset       일별 기록을 지우고 시작값을 0으로
 //
 // 모든 요청은 허용 IP여야 하고(아니면 403), 로그인을 뺀 요청은 로그인해야 한다(아니면 401). KEDP001-D018.
-// 관리자가 바꾼 내용은 서버 기록(log)에 남긴다. 비밀번호와 cookie 값은 남기지 않는다.
+// 관리자가 바꾼 내용은 서버 기록(log)에 admin.audit로 남긴다. 비밀번호와 cookie 값은 남기지 않는다(KEDP001-D026).
 package admin
 
 import (
@@ -25,13 +25,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"mime"
 	"net/http"
 	"net/netip"
 	"strings"
 	"time"
 
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/logx"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/store"
 )
 
@@ -114,6 +114,8 @@ func (s *server) allowIP(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		addr, ok := ClientIP(r.RemoteAddr, r.Header.Values("X-Forwarded-For"), s.TrustedProxies)
 		if !ok || !allowed(s.AllowIPs, addr) {
+			// 허용 IP 거부는 접속 주소를 http.request 줄(403, WARN)에 붙인다(KEDP001-D026 7장 예외).
+			logx.AddAttrs(r, "ip", ipText(addr, ok))
 			write(w, http.StatusForbidden, Error{Error: "forbidden"})
 			return
 		}
@@ -242,19 +244,28 @@ func write(w http.ResponseWriter, status int, v any) {
 		return
 	}
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		log.Printf("admin: write response: %v", err)
+		// 대개 받는 쪽이 연결을 끊은 것이다. 응답 코드는 이미 보냈으므로 http.request 줄은 그대로 남는다.
+		logx.Debug(context.Background(), "http.write", "err", err.Error())
 	}
 }
 
-// serverError는 오류를 기록하고 화면에는 내용 없이 500을 돌려준다.
+// serverError는 화면에는 내용 없이 500을 돌려준다. 오류는 그 요청의 http.request 줄(ERROR)에 err로 붙는다.
 func serverError(w http.ResponseWriter, r *http.Request, err error) {
-	log.Printf("admin: %s %s: %v", r.Method, r.URL.Path, err)
+	logx.SetError(r, err)
 	write(w, http.StatusInternalServerError, Error{Error: "internal error"})
 }
 
 // audit은 관리자가 바꾼 내용을 서버 기록에 남긴다.
 func audit(r *http.Request, format string, args ...any) {
-	log.Printf("admin audit: account %q: %s", account(r), fmt.Sprintf(format, args...))
+	logx.Info(r.Context(), "admin.audit", "account", account(r), "change", fmt.Sprintf(format, args...))
+}
+
+// ipText는 로그에 남길 접속 주소다. 읽을 수 없으면 unknown이다.
+func ipText(addr netip.Addr, ok bool) string {
+	if !ok {
+		return "unknown"
+	}
+	return addr.String()
 }
 
 // Session은 로그인 상태다.
@@ -279,10 +290,10 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 			"account": req.Account == nil, "password": req.Password == nil})})
 		return
 	}
-	ip, _ := ClientIP(r.RemoteAddr, r.Header.Values("X-Forwarded-For"), s.TrustedProxies)
+	ip := ipText(ClientIP(r.RemoteAddr, r.Header.Values("X-Forwarded-For"), s.TrustedProxies))
 	// 계정이 틀렸든 비밀번호가 틀렸든 같은 응답이다. 기록에도 받은 계정 이름을 넣지 않는다(비밀번호를 잘못 넣었을 수 있다).
 	if !s.Accounts.verify(*req.Account, *req.Password) {
-		log.Printf("admin: login failed from %s", ip)
+		logx.Warn(r.Context(), "admin.login", "result", "failed", "ip", ip)
 		write(w, http.StatusUnauthorized, Error{Error: "login failed"})
 		return
 	}
@@ -301,7 +312,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true, SameSite: http.SameSiteStrictMode,
 		// Secure는 배포 Issue에서 HTTPS와 함께 켠다.
 	})
-	log.Printf("admin: account %q logged in from %s", ss.account, ip)
+	logx.Info(r.Context(), "admin.login", "result", "ok", "account", ss.account, "ip", ip)
 	write(w, http.StatusOK, s.sessionOut(ss))
 }
 
@@ -316,7 +327,7 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 		Name: CookieName, Value: "", Path: CookiePath, MaxAge: -1,
 		HttpOnly: true, SameSite: http.SameSiteStrictMode,
 	})
-	log.Printf("admin: account %q logged out", account(r))
+	logx.Info(r.Context(), "admin.logout", "account", account(r))
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusNoContent)
 }

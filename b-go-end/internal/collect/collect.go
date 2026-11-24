@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 	_ "time/tzdata" // 서버에 시간대 정보가 없어도 Asia/Seoul을 읽는다
 
@@ -18,6 +18,7 @@ import (
 
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/fetch"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/kedpv1"
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/logx"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/source"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/store"
 )
@@ -97,13 +98,16 @@ var ErrProcessor = errors.New("processor failed; collection stopped")
 // 지표 하나가 실패해도(제공처 오류 등) 다음 지표를 수집한다.
 // Rust가 결과를 주지 못하면 그 지표를 error로 기록하고 남은 지표는 수집하지 않는다(ErrProcessor).
 // DB에 쓰지 못하면 멈추고 오류를 돌려준다.
-func (c *Collector) Run(ctx context.Context, trigger string) (Summary, error) {
-	var sum Summary
+// 시작과 끝을 collect.start, collect.finish로 남긴다(KEDP001-D026 4장).
+func (c *Collector) Run(ctx context.Context, trigger string) (sum Summary, err error) {
+	started := time.Now()
+	defer func() { logFinish(ctx, trigger, sum, err, time.Since(started)) }()
 	today := c.now().In(Seoul)
 	targets, err := c.Store.Targets(ctx, today)
 	if err != nil {
 		return sum, err
 	}
+	logx.Info(ctx, "collect.start", "trigger", trigger, "indicators", len(targets))
 	for _, t := range targets {
 		status, err := c.collect(ctx, t, today, trigger)
 		switch status {
@@ -119,6 +123,22 @@ func (c *Collector) Run(ctx context.Context, trigger string) (Summary, error) {
 		}
 	}
 	return sum, nil
+}
+
+// logFinish는 collect.finish 한 줄을 남긴다.
+// 모두 성공(no_data 포함)이면 INFO, 일부 지표가 실패하면 WARN, 수집 전체가 멈추면 ERROR다. 서버를 끄느라 멈췄으면 WARN이다.
+func logFinish(ctx context.Context, trigger string, sum Summary, err error, took time.Duration) {
+	args := []any{"trigger", trigger, "success", sum.Success, "no_data", sum.NoData, "error", sum.Error, "ms", took.Milliseconds()}
+	switch {
+	case errors.Is(err, context.Canceled):
+		logx.Warn(ctx, "collect.finish", append(args, "err", "canceled")...)
+	case err != nil:
+		logx.Error(ctx, "collect.finish", append(args, "err", err.Error())...)
+	case sum.Error > 0:
+		logx.Warn(ctx, "collect.finish", args...)
+	default:
+		logx.Info(ctx, "collect.finish", args...)
+	}
 }
 
 // result는 지표 하나의 수집 결과다. collection_run에 쓴다.
@@ -140,11 +160,16 @@ func (c *Collector) collect(ctx context.Context, t store.Target, today time.Time
 	if err != nil {
 		return "", err
 	}
+	ctx = logx.With(ctx, "run", runID, "indicator", ind.ID)
 	r, stop := c.pages(ctx, runID, t, today)
 	if err := c.Store.FinishRun(ctx, runID, r.status, r.code, r.rows); err != nil {
 		return "", err
 	}
-	log.Printf("collect %s run %d: %s %s rows %d %s", ind.ID, runID, r.status, r.code, r.rows, r.detail)
+	lv := slog.LevelInfo
+	if r.status == store.StatusError {
+		lv = slog.LevelWarn
+	}
+	logx.Log(ctx, lv, "collect.indicator", "source", ind.Source, "status", r.status, "code", r.code, "rows", r.rows, "detail", r.detail)
 	if stop {
 		return r.status, ErrProcessor
 	}
@@ -168,7 +193,7 @@ func (c *Collector) pages(ctx context.Context, runID int64, t store.Target, toda
 	var inserted, updated, unchanged, empty int32
 	last := 1
 	for page := 1; page <= last; page++ {
-		ex, err := fetchPage(ctx, src, source.Request{Indicator: ind, Start: start, End: end, Page: page})
+		ex, err := fetchPage(logx.With(ctx, "page", page), src, source.Request{Indicator: ind, Start: start, End: end, Page: page})
 		if ex == nil {
 			var keyErr *source.KeyError
 			if errors.As(err, &keyErr) {

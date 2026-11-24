@@ -4,13 +4,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/logx"
 )
 
 const key = "abc+/=KEY"
@@ -41,8 +43,7 @@ func TestMask(t *testing.T) {
 func captureLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	t.Cleanup(logx.SetOutput(&buf, slog.LevelDebug))
 	return &buf
 }
 
@@ -73,7 +74,7 @@ func TestGetMasksLogAndErrors(t *testing.T) {
 		t.Errorf("status error body = %q", statusErr.Body)
 	}
 
-	if strings.Contains(logs.String(), key) || !strings.Contains(logs.String(), "GET ") {
+	if strings.Contains(logs.String(), key) || strings.Count(logs.String(), "level=WARN comp=go event=fetch.request url=") != 2 {
 		t.Errorf("log not masked: %s", logs.String())
 	}
 }
