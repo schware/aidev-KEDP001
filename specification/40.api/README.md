@@ -4,6 +4,7 @@
 - 근거: KEDP001-D016(net/http), KEDP001-D017(MVP 범위), KEDP001-D022 9·11(단위, 주기), `specification/50.web/README.md` 2·3장, Issue #36
 - 관리자 API(5장) 근거: KEDP001-D012, D018, D019, D022, `specification/50.web/README.md` 1장 관리자, 4~6장, Issue #40
 - 방문자 수 API(6장) 근거: Issue #48
+- 화면 동작 기록 API(7장), 요청 ID(1장) 근거: KEDP001-D026, Issue #93
 - 지표 구분(`category`, 2·3장, 5.4~5.6, 5.11) 근거: KEDP001-D024, Issue #52
 - 직전 값과 차이(`previous`, `change`, 2·3장) 근거: KEDP001-D024, Issue #70
 - 구현: `b-go-end/internal/api`, `b-go-end/internal/store/read.go`, 관리자 API는 `b-go-end/internal/admin`, `b-go-end/internal/store/admin.go`
@@ -19,10 +20,11 @@
 | 서버 | Go `cmd/server`. 수집과 같은 프로그램에서 함께 돈다 |
 | 주소 | `.env`의 `KEDP_API_ADDR`. 비우면 `127.0.0.1:8080` |
 | 경로 | 모두 `/api/`로 시작한다 |
-| method | 사용자 조회 API는 `GET`만 받는다(`HEAD`도 된다). 방문 세기(`POST /api/visits`)는 6장, 관리자 API는 5장 |
+| method | 사용자 조회 API는 `GET`만 받는다(`HEAD`도 된다). 방문 세기(`POST /api/visits`)는 6장, 화면 동작 기록(`POST /api/events`)은 7장, 관리자 API는 5장 |
 | 응답 | JSON, `Content-Type: application/json; charset=utf-8` |
 | CORS | 두지 않는다. 화면 개발은 Vite proxy로 `/api`를 Go로 넘긴다 |
-| 인증 | 사용자 조회 API와 방문자 수 공개 API(6.2, 6.3)는 없다. 관리자 API는 허용 IP + 로그인(5장) |
+| 인증 | 사용자 조회 API, 방문자 수 공개 API(6.2, 6.3), 화면 동작 기록 API(7장)는 없다. 관리자 API는 허용 IP + 로그인(5장) |
+| 요청 ID | 요청에 `X-Request-ID`(영문·숫자·`-_.`, 64자까지)가 있으면 쓰고, 없거나 형식이 틀리면 Go가 만든다. 모든 응답에 `X-Request-ID`로 돌려주고, 그 요청의 서버 로그에 `req`로 붙는다(KEDP001-D026 5장). 배포에서는 nginx가 만들어 넘긴다 |
 | DB | `kedp_go` 계정. 사용자 조회 API는 읽기만 한다. 방문 세기는 날짜별 숫자만 쓴다(6장) |
 
 Vite proxy 예(`vite.config.ts`). `xfwd: true`는 관리자 API가 허용 IP를 보는 데 쓴다(5.1). 배포에서는 nginx가 같은 일을 한다(`deploy/README.md`):
@@ -709,4 +711,66 @@ curl -s -b $J $A/visits
 curl -s -b $J -X PUT -H "$H" -d '{"base":3000}' $A/visits/base
 curl -s -b $J -X PUT -H "$H" -d '{"base":-1}' $A/visits/base     # 400
 curl -s -b $J -X POST -H "$H" -d '{}' $A/visits/reset             # 숫자가 모두 지워진다. 시험할 때만
+```
+
+---
+
+# 7. 화면 동작 기록 API (KEDP001-D026, Issue #93)
+
+화면에서 일어난 동작(화면 열기, 카드 누르기, 관리자 버튼 등)을 서버 로그에 한 줄로 남긴다. 버튼 클릭은 브라우저에서만 일어나므로 이 API로만 서버에 남는다. DB에는 쓰지 않는다.
+
+```text
+POST /api/events
+```
+
+| 항목 | 내용 |
+| --- | --- |
+| 인증 | 없다 |
+| 본문 | JSON 객체 하나, 1 KiB(1024바이트)까지. `Content-Type`은 보지 않는다 |
+| 응답 | 언제나 204(본문 없음), `Cache-Control: no-store`. 받지 않은 동작(아래)도 204다. 화면은 응답을 보지 않는다 |
+| 기록 | 받은 동작 하나를 `comp=web` 한 줄로 남긴다. level은 Go가 정한다(`ui.error`만 WARN, 나머지 INFO). 본문에 `level`이 있어도 쓰지 않는다 |
+| 남기지 않는 것 | 접속 주소, User-Agent. 받지 않은 동작의 값 |
+| 초당 상한 | 서버 전체에서 1초에 50개까지 받는다. 넘으면 버리고, 1분에 한 번 `ui.dropped count=…`(WARN)를 남긴다 |
+| 화면이 보내는 법 | `navigator.sendBeacon`(안 되면 `fetch` + `keepalive`). 실패해도 다시 보내지 않고 화면 동작을 막지 않는다 |
+
+## 7.1 받는 동작 (허용 목록)
+
+| `event` | 칸(모두 꼭 있어야 한다) | level | 언제 |
+| --- | --- | --- | --- |
+| `ui.page_view` | `page` | INFO | 화면 열림(메인, 상세, 관리자 각 화면) |
+| `ui.card_open` | `indicator` | INFO | 메인에서 카드를 눌러 상세로 이동 |
+| `ui.related_open` | `indicator`, `from` | INFO | 상세 화면(`from` 지표)에서 관련 지표(`indicator`)를 누름 |
+| `ui.admin_action` | `action` | INFO | 관리자 화면의 버튼을 누름 |
+| `ui.error` | `path`, `status` | WARN | 화면에서 API 호출이 실패함 |
+
+| 칸 | 값 |
+| --- | --- |
+| `page`, `path` | `/`로 시작하는 경로, 영문·숫자·`/_.-`, 100자까지. query string(`?`)은 받지 않는다. 예: `/`, `/indicator/cpi`, `/admin/dashboard`, `/api/indicators/cpi` |
+| `indicator`, `from` | 지표 id(5.5 `id`와 같은 규칙), 64자까지 |
+| `action` | `login`, `logout`, `indicator_add`, `indicator_edit`, `display_order_save`, `collect_time_save`, `visit_base_save`, `visit_reset` |
+| `status` | API 응답 코드(정수 100~599). 응답을 받지 못했으면(연결 실패) `0` |
+
+- 받지 않는 동작: JSON이 아님, 1 KiB 넘음, `event`가 없거나 목록 밖, 꼭 있어야 할 칸이 없음, 칸 값이 틀림. 로그에는 `ui.rejected reason=…`(DEBUG)만 남고 값은 남지 않는다.
+- 목록에 없는 칸은 버린다(동작은 받는다).
+
+기록 예:
+
+```text
+time=2026-11-24T09:12:40.001+09:00 level=INFO comp=web event=ui.card_open req=9a0b… indicator=cpi
+time=2026-11-24T09:12:41.230+09:00 level=WARN comp=web event=ui.error req=7c1d… path=/api/indicators/cpi status=500
+```
+
+## 7.2 오류
+
+| 상태 | 언제 | 응답 |
+| --- | --- | --- |
+| 405 | `POST`가 아닌 method. `Allow: POST` | `{"error":"method not allowed"}` |
+
+## 7.3 확인 명령
+
+```sh
+E=http://127.0.0.1:8080/api/events
+curl -s -i -X POST -d '{"event":"ui.card_open","indicator":"cpi"}' $E      # 204, 서버 로그에 comp=web event=ui.card_open
+curl -s -i -X POST -d '{"event":"ui.unknown"}' $E                          # 204, 기록 없음(DEBUG면 ui.rejected)
+curl -s -i $E                                                              # 405
 ```

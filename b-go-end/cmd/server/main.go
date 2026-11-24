@@ -1,6 +1,7 @@
 // server는 KEDP 수집 서버다. DB indicator의 지표를 수집 시각(app_setting collect_time, Asia/Seoul)마다 수집하고,
 // 받은 응답을 Rust 처리 서버(ProcessPage)로 넘긴다(KEDP001-D019, D022, b-proto/README.md).
-// 사용자 화면의 조회 API(KEDP_API_ADDR, internal/api), 방문자 수 API(/api/visits, internal/api)와
+// 사용자 화면의 조회 API(KEDP_API_ADDR, internal/api), 방문자 수 API(/api/visits, internal/api),
+// 화면 동작 기록 API(/api/events, internal/api)와
 // 관리자 API(/api/admin/, internal/admin)도 함께 연다.
 //
 //	go run ./cmd/server          # 조회 API를 열고, 수집 시각마다 수집한다(trigger schedule)
@@ -194,6 +195,7 @@ func run(ctx context.Context, envPath string, once bool, timeout time.Duration, 
 	visits := api.VisitHandler(api.VisitConfig{Store: st, TrustedProxies: adminConfig.TrustedProxies, Loc: collect.Seoul})
 	mux.Handle("/api/visits", visits)
 	mux.Handle("/api/visits/summary", visits)
+	mux.Handle("/api/events", api.EventHandler(api.EventConfig{}))
 	mux.Handle("/", api.Handler(st, time.Now, collect.Seoul))
 	go func() {
 		apiErr <- api.Serve(ctx, ln, logx.HTTP(mux))
