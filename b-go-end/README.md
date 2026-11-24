@@ -56,6 +56,8 @@ time=2026-11-24T06:00:03.456+09:00 level=WARN comp=go event=collect.indicator ru
 | `admin.login` | 성공 INFO, 실패 WARN |
 | `admin.logout`, `admin.audit` | INFO |
 | `visit.limit` | WARN |
+| `ui.*`(`comp=web`) | 화면이 보낸 동작(아래 "화면 동작 기록 API"). `ui.error`만 WARN, 나머지 INFO |
+| `ui.dropped`, `ui.rejected` | WARN(초당 상한을 넘어 버림, 1분에 한 번) / DEBUG(받지 않은 동작, 값은 남기지 않음) |
 | `http.write`, `http.error` | DEBUG(응답을 쓰지 못함, 대개 연결 끊김) / ERROR(`http.request` 밖에서 난 500, 시험용) |
 
 ```sh
@@ -183,6 +185,16 @@ $P < b-sql-db/migrations/0003_visits.up.sql
 (cd b-go-end && KEDP_VISIT_TEST_DB_NAME=kedp_visit_check go test -count=1 -run Visit ./internal/store)
 docker exec kedp-postgres dropdb -U sunmoon kedp_visit_check
 ```
+
+## 화면 동작 기록 API (`internal/api/events.go`, Issue #93)
+
+| 경로 | 하는 일 |
+| --- | --- |
+| `POST /api/events` | 화면 동작 하나를 서버 로그에 `comp=web` 한 줄로 남긴다. 언제나 204 |
+
+- 받는 동작과 칸은 `specification/40.api/README.md` 7장의 허용 목록뿐이다. 목록 밖, 틀린 값, 1 KiB 넘음은 버린다(`ui.rejected`, DEBUG).
+- 서버 전체에서 초당 50개까지 받는다. 넘으면 버리고 1분에 한 번 `ui.dropped`(WARN)를 남긴다.
+- DB에 쓰지 않는다. 접속 주소, User-Agent는 남기지 않는다.
 
 ## 관리자 API (`internal/admin`)
 

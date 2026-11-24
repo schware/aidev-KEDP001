@@ -2,7 +2,8 @@
 //
 //	time=2026-11-24T06:00:01.123+09:00 level=INFO comp=go event=http.request req=4f1c… method=GET path=/api/indicators status=200 ms=12
 //
-// 모든 줄에 time(Asia/Seoul, 밀리초), level(DEBUG, INFO, WARN, ERROR), comp=go, event가 있다.
+// 모든 줄에 time(Asia/Seoul, 밀리초), level(DEBUG, INFO, WARN, ERROR), comp, event가 있다.
+// comp는 go다. 화면이 보낸 동작(POST /api/events)만 LogComp로 comp=web을 쓴다.
 // 표준 라이브러리 log/slog의 TextHandler를 쓰므로 공백이 있는 값은 큰따옴표로 감싼다.
 // ctx에 With로 붙인 값(req, run, indicator, page 등)은 event 바로 뒤에 나온다.
 //
@@ -22,6 +23,9 @@ import (
 
 // Comp는 이 서버의 comp 값이다.
 const Comp = "go"
+
+// CompWeb은 화면이 보낸 동작(ui.*)의 comp 값이다(KEDP001-D026 2장).
+const CompWeb = "web"
 
 // timeFormat은 RFC 3339에 밀리초를 붙인 꼴이다.
 const timeFormat = "2006-01-02T15:04:05.000Z07:00"
@@ -44,8 +48,7 @@ var (
 func init() { logger.Store(newLogger(os.Stderr)) }
 
 func newLogger(w io.Writer) *slog.Logger {
-	h := slog.NewTextHandler(w, &slog.HandlerOptions{Level: level, ReplaceAttr: replace})
-	return slog.New(h.WithAttrs([]slog.Attr{slog.String("comp", Comp)}))
+	return slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: level, ReplaceAttr: replace}))
 }
 
 // replace는 시각을 Asia/Seoul 밀리초로 바꾸고, 비어 있는 msg를 뺀다(event를 attr로 남기므로 msg는 쓰지 않는다).
@@ -115,6 +118,11 @@ func With(ctx context.Context, args ...any) context.Context {
 
 // Log는 event 한 줄을 lv로 남긴다. args는 key, value 쌍이다.
 func Log(ctx context.Context, lv slog.Level, event string, args ...any) {
+	LogComp(ctx, Comp, lv, event, args...)
+}
+
+// LogComp는 comp를 정해 event 한 줄을 남긴다. 화면이 보낸 동작(comp=web)에 쓴다.
+func LogComp(ctx context.Context, comp string, lv slog.Level, event string, args ...any) {
 	l := logger.Load()
 	if ctx == nil {
 		ctx = context.Background()
@@ -123,8 +131,8 @@ func Log(ctx context.Context, lv slog.Level, event string, args ...any) {
 		return
 	}
 	ctxArgs, _ := ctx.Value(attrsKey{}).([]any)
-	all := make([]any, 0, 2+len(ctxArgs)+len(args))
-	all = append(all, "event", event)
+	all := make([]any, 0, 4+len(ctxArgs)+len(args))
+	all = append(all, "comp", comp, "event", event)
 	all = append(all, ctxArgs...)
 	all = append(all, args...)
 	l.Log(ctx, lv, "", all...)
