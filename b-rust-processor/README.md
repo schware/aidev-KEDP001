@@ -40,6 +40,7 @@ b-rust-processor/
 | `KEDP_DB_NAME` | DB 이름 | 시작하지 않는다 |
 | `kedp_rust` | `kedp_rust` 계정 비밀번호 | 시작하지 않는다 |
 | `KEDP_PROCESSOR_ADDR` | 이 서버의 주소(IP:포트) | `127.0.0.1:50051` |
+| `KEDP_LOG_LEVEL` | 로그 level(`DEBUG`, `INFO`, `WARN`, `ERROR`) | `INFO`. 틀린 값이면 `INFO`로 두고 `config.log_level`(WARN)을 남긴다 |
 
 - DB 접속 값은 `b-sql-db/README.md`의 "개발 서버의 DB"를 본다.
 - 오류 메시지와 기록에는 변수 이름만 나오고 값은 나오지 않는다.
@@ -60,7 +61,7 @@ CARGO_BUILD_JOBS=2 cargo run --release
 ```
 
 - `Ctrl+C` 또는 SIGTERM(`docker stop`)을 받으면 멈춘다.
-- 호출마다 한 줄씩 기록한다(run_id, indicator_id, page, 결과, 행 수, 오류 코드). 응답 본문과 요청 주소는 기록하지 않는다.
+- 호출마다 `process.page` 한 줄을 남긴다(아래 "로그"). 응답 본문과 요청 주소는 남기지 않는다.
 - DB 접속은 처음 호출을 받을 때 한다. 상태 확인은 `Check`로 한다.
 
 호출해 보기(`grpcurl`, 저장소 최상위 폴더에서):
@@ -71,6 +72,27 @@ grpcurl -plaintext -import-path b-proto -proto kedp/v1/processor.proto \
 ```
 
 `ProcessPage`는 DB에 쓴다. `KEDP_DB_NAME`이 `kedp`이면 실제 DB에 쓰게 된다.
+
+## 로그 (`src/log.rs`, KEDP001-D026)
+
+stderr에 한 줄씩 남긴다. 형식과 level 기준은 KEDP001-D026이고, b-go-end와 같은 꼴이다. 새 의존성 없이 `log_debug!`, `log_info!`, `log_warn!`, `log_error!`로 찍는다.
+
+```text
+time=2026-11-24T06:00:03.456+09:00 level=INFO comp=rust event=process.page run=812 indicator=cpi page=1 status=SUCCESS inserted=0 updated=1 unchanged=119 skipped_empty=0 code="" ms=35
+```
+
+- 앞의 네 칸은 늘 같다: `time`(Asia/Seoul, 밀리초), `level`, `comp=rust`, `event`.
+- 값이 비었거나 공백, `"`, `=`, 제어 문자가 있으면 큰따옴표로 감싼다. 줄바꿈은 `\n`이 되어 언제나 한 줄이다.
+- Go와 같은 `run`(collection_run.id), `indicator`, `page`를 쓰므로 `grep 'run=812'`로 Go와 Rust 줄을 함께 본다.
+
+| event | level |
+| --- | --- |
+| `server.start`(`addr`, `log_level`), `server.stop`(`reason`) | INFO. 오류로 멈추면 그 앞에 `server.error`(ERROR) |
+| `config.log_level` | WARN |
+| `grpc.check` | 성공 DEBUG(Go가 `processor.check`로 남긴다), 실패 ERROR |
+| `process.page` | `SUCCESS`·`NO_DATA` INFO, 제공처 오류 판정(`ERROR`) WARN, gRPC 오류 ERROR(`grpc_code`, `err`) |
+| `process.step` | DEBUG. 단계(`validate`, `load_indicator`, `read`, `save`)별 `ms` |
+| `source_unit.changed` | WARN. 처음 채우면 `old=""` |
 
 ## 테스트
 
@@ -106,6 +128,6 @@ CARGO_BUILD_JOBS=2 cargo test
 - 응답 단위를 `indicator.source_unit`에 쓴다(KEDP001-D022 결정 9, Issue #76). 관측값과 같은 transaction이다.
   - ECOS는 행의 `UNIT_NAME`, KOSIS는 행의 `UNIT_NM`을 읽는다. 공공데이터포털은 단위가 없어 쓰지 않는다.
   - 응답 안에서 가장 최근 기간 행의 단위를 쓴다. 그 행의 단위가 없거나 비었으면(예: 출생아 수 표는 `UNIT_NM`이 없고 `C1_NM`에 단위가 붙어 있다) 지금 값을 그대로 둔다(null로 덮지 않는다).
-  - 지금 값과 다를 때만 UPDATE한다. 바뀌면 서버 기록에 `source_unit changed indicator_id=… old=… new=…`를 남긴다.
+  - 지금 값과 다를 때만 UPDATE한다. 바뀌면 서버 기록에 `event=source_unit.changed run=… indicator=… old=… new=…`(WARN)를 남긴다.
   - 관리자 단위(`unit`)는 건드리지 않는다. 화면은 `unit`이 있으면 그것을 쓴다(Go 조회 API).
   - 권한은 `b-sql-db/migrations/0008_rust_source_unit.up.sql`(이 칸 하나만)이다. 0008이 없는 DB에서는 단위가 있는 응답의 처리가 `INTERNAL`로 실패한다.
