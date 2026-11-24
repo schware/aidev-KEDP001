@@ -15,6 +15,7 @@ import { useAdminAuth } from './auth.ts'
 import { collectTimeError } from './form.ts'
 import { buttonClass, Field, inputClass, LoadError, primaryButtonClass } from './ui.tsx'
 import { useAdminGet } from './useAdminGet.ts'
+import { adminAction } from '../events.ts'
 
 /** API 관리(/admin/api, 50.web 6장). 키 값을 넣거나 보여 주는 칸은 없다. */
 export function ApiPage() {
@@ -67,6 +68,7 @@ function CollectTimeEditor({ initial }: { initial: string }) {
     setError(v ?? undefined)
     if (v) return
     setBusy(true)
+    adminAction('collect_time_save')
     try {
       const res = await adminRequest<CollectTime>('PUT', collectTimePath, { collect_time: text })
       setCurrent(res.collect_time)

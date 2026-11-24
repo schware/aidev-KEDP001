@@ -7,6 +7,7 @@ import { parseVisitBase } from './form.ts'
 import { buttonClass, Field, inputClass, LoadError, primaryButtonClass } from './ui.tsx'
 import { useAdminGet } from './useAdminGet.ts'
 import { VisitsChart } from './VisitsChart.tsx'
+import { adminAction } from '../events.ts'
 
 export const resetConfirmText = '지금까지의 일별 기록이 지워집니다. 시작값도 0이 됩니다. 0부터 다시 시작할까요?'
 
@@ -92,6 +93,7 @@ function BaseEditor({ current, onChange }: { current: number; onChange: (v: Admi
     }
     setError(undefined)
     setBusy(true)
+    adminAction('visit_base_save')
     try {
       const res = await adminRequest<AdminVisits>('PUT', visitBasePath, { base: p.value })
       onChange(res)
@@ -147,6 +149,7 @@ function ResetButton({ onChange }: { onChange: (v: AdminVisits) => void }) {
     if (!window.confirm(resetConfirmText)) return
     setBusy(true)
     setMessage(undefined)
+    adminAction('visit_reset')
     try {
       onChange(await adminRequest<AdminVisits>('POST', visitResetPath, {}))
       setMessage({ ok: true, text: '0부터 다시 시작합니다.' })

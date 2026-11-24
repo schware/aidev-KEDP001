@@ -4,6 +4,7 @@ import { Message } from '../components/Layout.tsx'
 import { ApiError } from '../api.ts'
 import { adminRequest, authFailure, checkSession, loginPath, type Session, type SessionCheck } from './api.ts'
 import { Field, Forbidden, inputClass, primaryButtonClass } from './ui.tsx'
+import { adminAction } from '../events.ts'
 
 /**
  * 관리자 로그인(/admin/login). 이미 로그인했으면 Dashboard 관리로 간다.
@@ -43,6 +44,7 @@ function LoginForm({ onForbidden }: { onForbidden: () => void }) {
     e.preventDefault()
     setBusy(true)
     setError(null)
+    adminAction('login')
     try {
       await adminRequest<Session>('POST', loginPath, { account, password })
       setPassword('')

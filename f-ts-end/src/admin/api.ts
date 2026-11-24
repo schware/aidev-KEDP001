@@ -1,6 +1,7 @@
 // Go 관리자 API의 요청·응답 형식이다. 기준: specification/40.api/README.md 5장
 // session은 서버가 준 cookie(HttpOnly)만 쓴다. 비밀번호와 session을 브라우저 저장소에 두지 않는다.
 import { ApiError, type Cycle, type ErrorBody } from '../api.ts'
+import { apiError, apiNetworkError } from '../events.ts'
 
 export type SourceCode = 'ecos' | 'kosis' | 'data-go-kr'
 
@@ -131,6 +132,7 @@ export function indicatorPath(id: string): string {
 /**
  * 관리자 API를 부른다. 200대가 아니면 ApiError를 던진다(400이면 fields가 붙는다).
  * POST, PUT은 Content-Type: application/json으로 보낸다(5.1). 204는 undefined다.
+ * 실패하면 ui.error를 보낸다(40.api 7장). 로그인하지 않은 상태 확인(session 401)과 취소는 보내지 않는다.
  */
 export async function adminRequest<T>(
   method: 'GET' | 'POST' | 'PUT',
@@ -142,14 +144,21 @@ export async function adminRequest<T>(
   if (method !== 'GET') {
     headers['Content-Type'] = 'application/json'
   }
-  const res = await fetch(path, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-    credentials: 'same-origin',
-    signal,
-  })
+  let res: Response
+  try {
+    res = await fetch(path, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      credentials: 'same-origin',
+      signal,
+    })
+  } catch (err) {
+    apiNetworkError(path, err)
+    throw err
+  }
   if (!res.ok) {
+    apiError(path, res.status)
     let errBody: ErrorBody | undefined
     try {
       errBody = (await res.json()) as ErrorBody

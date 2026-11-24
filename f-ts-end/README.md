@@ -25,6 +25,22 @@
 - 방문자 API가 실패하면(POST, summary 어느 쪽이든) footer 숫자만 보이지 않는다. 화면의 다른 부분은 그대로다. POST가 실패하면 날짜를 적지 않아, 다음에 열 때 다시 보낸다.
 - 관리자 화면(`/admin/...`)은 이 footer를 쓰지 않으므로 POST를 보내지 않는다.
 
+## 화면 동작 기록 (40.api 7장, KEDP001-D026)
+
+화면 동작을 `POST /api/events`로 보내 서버 로그(`comp=web`)에 남긴다. 코드는 `src/events.ts`다.
+
+| 동작 | 언제 | 보내는 곳 |
+| --- | --- | --- |
+| `ui.page_view` | 화면 주소가 바뀔 때(메인, 상세, 관리자 각 화면). 경로만, query string은 뺀다 | `App.tsx` |
+| `ui.card_open` | 메인에서 카드를 누름 | `pages/Home.tsx` |
+| `ui.related_open` | 상세에서 관련 지표를 누름 | `pages/IndicatorPage.tsx` |
+| `ui.admin_action` | 관리자 버튼(로그인, 로그아웃, 지표 추가·수정, 순서 저장, 수집 시각 저장, 방문자 시작값 저장·초기화)을 누름 | `admin/*.tsx` |
+| `ui.error` | API 호출 실패(응답 코드, 응답을 못 받으면 0). 로그인하지 않은 상태 확인(session 401)과 취소는 보내지 않는다 | `api.ts` `getJSON`, `admin/api.ts` `adminRequest` |
+
+- `navigator.sendBeacon`으로 보내고, 안 되면 `fetch` + `keepalive`다. 실패해도 다시 보내지 않고 화면에 아무것도 보이지 않는다.
+- level, 비밀번호, 입력값, 계정 이름은 보내지 않는다.
+- 개발 중(React StrictMode)에는 `ui.page_view`가 두 번 갈 수 있다. build한 화면에서는 한 번이다.
+
 ## 관리자 화면
 
 - 사용자 화면에는 관리자 링크가 없다. 주소(`/admin/...`)로 바로 들어간다. `/admin`은 `/admin/dashboard`로 간다.
@@ -57,6 +73,7 @@ npm run dev:mock   # Go 서버 없이 mock/의 가짜 데이터로 띄운다
 - `dev:mock`의 관리자 API(`mock/admin.ts`)는 계정·비밀번호를 확인하지 않는다. 둘 다 넣으면 로그인되고, 계정이 `fail`이면 로그인 실패다.
   관리자 화면에서 바꾼 것은 사용자 화면에도 보인다(dev 서버를 다시 켜면 처음으로 돌아간다).
 - `MOCK_ADMIN=forbidden npm run dev:mock`으로 띄우면 관리자 API가 모두 403이다(허용 IP가 아닐 때 화면).
+- `dev:mock`의 `/api/events`는 받은 본문을 터미널에 `[mock] /api/events …`로 보이고 204다.
 - `dev:mock`의 방문자 API(`mock/visits.ts`)는 같은 사람을 거르지 않는다. POST가 올 때마다 오늘 숫자가 1 늘어난다. `MOCK_VISITS=error npm run dev:mock`이면 방문자 API가 500이다(footer 숫자가 숨는 화면).
 
 ## 빌드

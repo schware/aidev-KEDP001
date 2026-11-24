@@ -20,6 +20,7 @@ import {
   type SettingsForm,
 } from './form.ts'
 import { buttonClass, Field, FormErrors, inputClass, primaryButtonClass } from './ui.tsx'
+import { adminAction } from '../events.ts'
 
 const settingsKeys = ['name', 'category', 'cycle', 'unit', 'chart_period', 'decimals', 'notice', 'related']
 const addKeys = [...settingsKeys, 'id', 'source', 'stat_code', 'item_code', 'org_id', 'classes', 'value_field', 'visible']
@@ -71,6 +72,7 @@ export function EditDialog({
       return
     }
     setBusy(true)
+    adminAction('indicator_edit')
     try {
       onSaved(await adminRequest<AdminIndicator>('PUT', indicatorPath(indicator.id), editBody(form)))
     } catch (err) {
@@ -148,6 +150,7 @@ export function AddDialog({
     setMessage(undefined)
     if (Object.keys(v).length > 0) return
     setBusy(true)
+    adminAction('indicator_add')
     try {
       onAdded(await adminRequest<AdminIndicator>('POST', indicatorsPath, addBody(form)))
     } catch (err) {
