@@ -224,7 +224,7 @@ rm /srv/projects/kedp-backup/roles.sql                          # 비밀번호 h
 ```sh
 docker compose up -d
 docker compose ps                                       # 4개 모두 running, postgres는 healthy
-docker compose logs --tail 20 go rust                   # go: "processor check ok", "server started"
+docker compose logs --tail 20 go rust                   # go: event=processor.check ok=true, event=server.start
 ```
 
 확인(5장)을 모두 한 뒤 `/srv/projects/kedp-backup/kedp.dump`를 지우고, 백업 crontab(6장)을 등록한다. dell-debian의 `~/kedp-move`도 지운다.
@@ -255,7 +255,7 @@ select value from app_setting where key = 'collect_time';
 select trigger, status, count(*), max(finished_at) from collection_run
  where started_at > now() - interval '2 days' group by 1, 2 order by 4 desc;
 SQL
-docker compose logs --since 24h go | grep -E 'collection|server started' | tail
+docker compose logs --since 24h go | grep -E 'event=(collect\.finish|schedule\.next|server\.start)' | tail
 ```
 
 허용 IP의 PC 브라우저에서:

@@ -2,7 +2,7 @@
 
 - 상태: draft
 - 대상: Sun&Moon(소유자)
-- 근거: KEDP001-D002(Docker), D012(키 보호), D018(관리자 접근), D020(SSH 배포, 백업), D023(배포 방식)
+- 근거: KEDP001-D002(Docker), D012(키 보호), D018(관리자 접근), D020(SSH 배포, 백업), D023(배포 방식), D026(로그)
 
 이 문서 하나로 **image 만들기부터 실행 서버 배포, 백업, 다음 배포까지** 따라 할 수 있다. 단계마다 "왜 하는지"를 먼저 쓰고 명령을 쓴다.
 
@@ -305,10 +305,13 @@ docker compose ps                       # 4개 모두 Up, postgres는 healthy
 docker compose logs --tail 20 go rust
 ```
 
-go 기록에서 볼 것:
+기록에서 볼 것(한 줄 형식은 9.1):
 
-- `processor check ok`: go가 rust에 닿았다.
-- `server started (API and schedule)`: API가 열리고 매일 수집 예약이 시작됐다.
+- rust `event=server.start addr=0.0.0.0:50051`: rust가 열렸다.
+- go `event=processor.check ok=true`: go가 rust에 닿았고, rust가 DB를 읽을 수 있다.
+- go `event=server.start mode=serve`: API가 열리고 매일 수집 예약이 시작됐다.
+- go `event=schedule.next at=…`: 다음 수집 시각.
+- `level=ERROR` 줄이 없어야 한다.
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8090/              # 200
@@ -357,18 +360,20 @@ docker compose ps nginx         # PORTS에 0.0.0.0:<새 포트>->80/tcp
 - 아무나 메모를 꾸며 보낼 수 있으므로, go는 **내부 network(nginx)에서 온 요청의 메모만 믿는다.** compose가 go에 `KEDP_TRUSTED_PROXIES = KEDP_NET_SUBNET`을 넣어 준다.
 - nginx는 브라우저가 보낸 메모를 버리고 **자기가 본 주소로 덮어쓴다.** 그래서 꾸민 메모는 쓰이지 않는다.
 
-**PC 주소는 nginx 기록에서 찾는다.** 서버가 보는 PC 주소는 PC 설정 화면의 주소와 다를 수 있다(공유기, 회선, VPN을 거치면 바뀐다). 서버가 실제로 본 주소가 정답이다.
+**PC 주소는 go 기록에서 찾는다.** 서버가 보는 PC 주소는 PC 설정 화면의 주소와 다를 수 있다(공유기, 회선, VPN을 거치면 바뀐다). 서버가 실제로 본 주소가 정답이다.
 
-1. Windows 브라우저로 사용자 화면을 한 번 연다.
+nginx 기록에는 접속 주소가 남지 않는다(KEDP001-D026: 일반 사용자의 주소는 어디에도 남기지 않는다). 관리자 API가 허용 IP가 아니라서 막은 요청(403)만 go 기록에 주소(`ip`)를 남긴다.
+
+1. Windows 브라우저로 `http://<macpro-debian 주소>:8090/admin/login`을 연다. 아직 허용 IP가 아니므로 "허용된 주소가 아닙니다"가 보인다.
 2. 기록을 본다.
 
 ```bash
-docker compose logs --tail 5 nginx
+docker compose logs --since 5m go | grep 'status=403'
 ```
 
 ```text
-nginx-1  | <PC 주소> - - [날짜] "GET / HTTP/1.1" 200 ... "Mozilla/5.0 (Windows NT 10.0 ...
-           ▲ 끝에 Windows가 붙은 줄의 맨 앞 주소
+go-1  | time=… level=WARN comp=go event=http.request req=… method=GET path=/api/admin/session status=403 ms=0 ip=<PC 주소>
+                                                                                                          ▲ 이 주소
 ```
 
 3. 그 주소를 넣고 go를 다시 만든다.
@@ -710,7 +715,8 @@ container가 죽거나 서버가 재부팅되면 Docker가 다시 띄운다. 사
 | 4개 상태 보기 | `docker compose ps` |
 | 기록 보기 | `docker compose logs --tail 20 go` (go 대신 nginx, rust, postgres) |
 | 기록 계속 보기 | `docker compose logs -f go` (끝내기: `Ctrl+C`) |
-| 수집 기록만 보기 | `docker compose logs --since 24h go \| grep collection` |
+| 확인할 것만 보기 | `docker compose logs --since 24h \| grep -E 'level=(WARN\|ERROR)'` (9.1) |
+| 수집 기록만 보기 | `docker compose logs --since 24h go rust \| grep -E 'event=(collect\|process)\.'` |
 | `.env`를 고친 뒤 반영 | `docker compose up -d` |
 | 하나만 다시 켜기(설정 그대로) | `docker compose restart go` |
 | 모두 멈추기 / 다시 켜기 | `docker compose stop` / `docker compose up -d` |
@@ -718,6 +724,58 @@ container가 죽거나 서버가 재부팅되면 Docker가 다시 띄운다. 사
 | 서버에 있는 image | `docker images 'kedp-*'` |
 | DB에 들어가기 | `docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d kedp'` |
 | 백업 한 번 돌리기 | `./backup.sh` |
+
+## 9.1 로그 읽기 (KEDP001-D026)
+
+go, rust, nginx는 같은 한 줄 형식이다. 앞의 네 칸은 늘 같다.
+
+```text
+time=2026-11-25T06:00:03.456+09:00 level=INFO comp=rust event=process.page run=812 indicator=cpi page=1 status=SUCCESS inserted=0 updated=1 …
+     ▲ 한국 시각, 밀리초          ▲ level     ▲ 누가   ▲ 무슨 일          ▲ 그다음은 그 일의 값
+```
+
+| 칸 | 뜻 |
+| --- | --- |
+| `comp` | `nginx`, `go`, `rust`, `web`(화면에서 누른 버튼 등. go가 대신 남긴다) |
+| `req` | 요청 ID. nginx가 요청마다 만들어 go에 넘긴다. 같은 요청의 nginx, go 줄에 같은 값이 붙는다 |
+| `run` | 수집 실행 ID(`collection_run.id`). 같은 지표 수집의 go, rust 줄에 같은 값이 붙는다 |
+
+**level:** 네 가지뿐이다.
+
+| level | 뜻 | 할 일 |
+| --- | --- | --- |
+| `DEBUG` | 개발용 자세한 기록. 평소에는 남지 않는다 | 없음 |
+| `INFO` | 정상 동작 | 없음 |
+| `WARN` | 하나가 실패했지만 서버는 정상(제공처 오류, 지표 하나 수집 실패, 로그인 실패, 허용 IP 거부 등) | 하루 한 번 훑어본다. 같은 줄이 반복되면 확인한다 |
+| `ERROR` | 서버 쪽 문제로 기능이 실패(DB·rust 연결 실패, 5xx, 수집이 멈춤) | 바로 확인한다 |
+
+```bash
+docker compose logs --since 24h | grep -E 'level=(WARN|ERROR)'     # 확인할 것만
+docker compose logs --since 1h | grep 'level=ERROR'                 # 바로 볼 것
+docker compose logs --since 24h go | grep 'event=collect.finish'    # 수집이 끝났는지(성공 INFO, 일부 실패 WARN, 멈춤 ERROR)
+```
+
+**요청 하나 따라가기:** 화면에서 이상한 일이 있었으면, 그 시각의 nginx 줄에서 `req`를 찾아 go 줄을 함께 본다.
+
+```bash
+docker compose logs --since 10m nginx | grep 'status=5'             # 실패한 요청의 req=<값>을 찾는다
+docker compose logs --since 10m nginx go | grep 'req=<값>'          # 그 요청의 nginx, go 줄
+```
+
+**수집 하나 따라가기:** `collect.indicator` 줄의 `run`으로 go와 rust 줄을 함께 본다.
+
+```bash
+docker compose logs --since 24h go rust | grep 'run=<값> '
+```
+
+**더 자세히 보기(DEBUG):** `.env`의 `KEDP_LOG_LEVEL`을 바꾸고 go, rust를 다시 만든다. 다 보면 `INFO`로 되돌린다(DEBUG는 줄이 많다).
+
+```bash
+nano .env                        # KEDP_LOG_LEVEL=DEBUG
+docker compose up -d go rust     # restart는 .env를 다시 읽지 않는다
+```
+
+**보관:** container마다 10 MB 파일 5개(약 50 MB)까지 둔다. 넘으면 오래된 줄부터 지워진다. `docker compose down`이나 `up -d`로 container를 새로 만들면 그 container의 기록도 지워진다. 오래 볼 것(수집 결과)은 기록이 아니라 DB(`collection_run`)와 관리자 화면 API 관리에 있다.
 
 **`restart`와 `up -d`의 차이:** `restart`는 container를 그대로 껐다 켠다. 바뀐 `.env`, 바뀐 tag, 바뀐 포트를 **읽지 않는다.** `up -d`는 설정이 바뀐 container를 새로 만든다. 헷갈리면 `up -d`를 쓴다.
 
@@ -734,11 +792,11 @@ container가 죽거나 서버가 재부팅되면 Docker가 다시 띄운다. 사
 | 보이는 것 | 먼저 볼 것 |
 | --- | --- |
 | 브라우저가 계속 기다리다 실패 | 포트가 막혔다. PC에서 `Test-NetConnection <macpro-debian 주소> -Port 8090` |
-| 화면은 뜨는데 카드가 비어 있음 | `docker compose logs --tail 20 go`. DB 접속 오류인지 본다 |
-| 관리자 화면 "허용된 주소가 아닙니다" | WARP가 켜져 있는지. 5.10대로 nginx 기록의 PC 주소와 `.env`가 같은지 |
+| 화면은 뜨는데 카드가 비어 있음 | `docker compose logs --since 10m go \| grep level=ERROR`. DB 접속 오류(`status=500 … err=…`)인지 본다 |
+| 관리자 화면 "허용된 주소가 아닙니다" | WARP가 켜져 있는지. 5.10대로 go 기록(`status=403 … ip=`)의 PC 주소와 `.env`가 같은지 |
 | 로그인이 안 됨 | `admin` 파일 소유자 `65532`, 권한 `400`인지. 파일을 바꿨으면 `docker compose restart go` |
-| go가 계속 다시 시작됨 | `docker compose logs go`. 시작할 때 rust나 DB에 닿지 못하면 멈췄다가 다시 뜬다 |
-| 수집이 안 됨 | 관리자 화면 API 관리의 상태, `docker compose logs --since 24h go \| grep collection` |
+| go가 계속 다시 시작됨 | `docker compose logs go \| grep -E 'event=(processor.check\|server.error\|server.stop)'`. 시작할 때 rust나 DB에 닿지 못하면 멈췄다가 다시 뜬다 |
+| 수집이 안 됨 | 관리자 화면 API 관리의 상태, `docker compose logs --since 24h go \| grep -E 'event=(collect\|schedule)\.'` |
 | 백업 파일이 안 생김 | `tail /srv/projects/kedp-backup/backup.log`, `crontab -l` |
 | 메모리가 모자란 것 같음 | `free -h`의 available, `docker stats --no-stream`. 2026-10-31 기준 4개 띄운 뒤 available 약 2.1G |
 
