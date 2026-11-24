@@ -4,6 +4,7 @@ import { Message } from '../components/Layout.tsx'
 import { adminRequest, authFailure, checkSession, logoutPath, type SessionCheck } from './api.ts'
 import { AdminAuthContext, type AdminAuth } from './auth.ts'
 import { buttonClass, Forbidden } from './ui.tsx'
+import { adminAction } from '../events.ts'
 
 /**
  * 로그인해야 들어오는 관리자 화면(/admin/dashboard, /admin/api, /admin/visits)의 틀.
@@ -96,6 +97,7 @@ function LogoutButton() {
       className={buttonClass}
       onClick={() => {
         setBusy(true)
+        adminAction('logout')
         adminRequest<void>('POST', logoutPath)
           .catch(() => undefined)
           .finally(() => navigate('/admin/login', { replace: true }))

@@ -1,6 +1,7 @@
-import { lazy, Suspense } from 'react'
-import { Navigate, Outlet, Route, Routes } from 'react-router'
+import { lazy, Suspense, useEffect } from 'react'
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router'
 import { Layout, Message, NotFound } from './components/Layout.tsx'
+import { pageView } from './events.ts'
 import { Home } from './pages/Home.tsx'
 
 // 상세 화면은 차트(ECharts)가 커서 따로 읽는다. 메인 화면은 차트 없이 먼저 뜬다.
@@ -14,6 +15,9 @@ const VisitsPage = lazy(() => import('./admin/VisitsPage.tsx').then((m) => ({ de
 
 // 사이트 구조(50.web 7장). 사용자 화면에는 관리자 링크를 두지 않는다.
 export function App() {
+  // 화면이 바뀔 때마다 ui.page_view를 보낸다(40.api 7장). 경로만 보내고 query string은 뺀다.
+  const { pathname } = useLocation()
+  useEffect(() => pageView(pathname), [pathname])
   return (
     <Suspense fallback={<Message>불러오는 중…</Message>}>
       <Routes>

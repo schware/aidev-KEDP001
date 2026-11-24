@@ -5,6 +5,7 @@ import { ChangeLine } from '../components/ChangeLine.tsx'
 import { Message } from '../components/Layout.tsx'
 import { formatPeriod, formatValue } from '../format.ts'
 import { useApi } from '../useApi.ts'
+import { sendEvent } from '../events.ts'
 
 /**
  * 메인 화면: 노출된 지표 카드를 구분별로 묶어 보여준다(50.web 2장).
@@ -75,6 +76,7 @@ function IndicatorCard({ card }: { card: Card }) {
   return (
     <Link
       to={`/indicator/${encodeURIComponent(card.id)}`}
+      onClick={() => sendEvent({ event: 'ui.card_open', indicator: card.id })}
       className="group flex h-full min-h-44 flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-blue-500 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
     >
       <h3 className="font-medium text-slate-700 group-hover:text-blue-700">{card.name}</h3>

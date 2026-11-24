@@ -1,4 +1,5 @@
 // Go 조회 API의 응답 형식이다. 기준: specification/40.api/README.md
+import { apiError, apiNetworkError } from './events.ts'
 
 export type Cycle = 'D' | 'M' | 'Q' | 'A'
 
@@ -73,9 +74,17 @@ export class ApiError extends Error {
   }
 }
 
+/** API를 읽는다. 실패하면 ui.error를 보내고(40.api 7장) ApiError(또는 fetch 오류)를 던진다. */
 export async function getJSON<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(path, { signal, headers: { Accept: 'application/json' } })
+  let res: Response
+  try {
+    res = await fetch(path, { signal, headers: { Accept: 'application/json' } })
+  } catch (err) {
+    apiNetworkError(path, err)
+    throw err
+  }
   if (!res.ok) {
+    apiError(path, res.status)
     throw new ApiError(res.status)
   }
   return (await res.json()) as T

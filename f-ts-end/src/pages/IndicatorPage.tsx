@@ -6,6 +6,7 @@ import { Chart } from '../components/Chart.tsx'
 import { Message, NotFound } from '../components/Layout.tsx'
 import { formatCycle, formatDateTime, formatPeriod, formatValue } from '../format.ts'
 import { useApi } from '../useApi.ts'
+import { sendEvent } from '../events.ts'
 
 /** 지표 상세 화면(50.web 3장). */
 export function IndicatorPage() {
@@ -121,7 +122,11 @@ function DetailView({ d }: { d: Detail }) {
               <ul className="space-y-1.5">
                 {d.related.map((r) => (
                   <li key={r.id}>
-                    <Link to={`/indicator/${encodeURIComponent(r.id)}`} className="text-blue-600 hover:underline">
+                    <Link
+                      to={`/indicator/${encodeURIComponent(r.id)}`}
+                      onClick={() => sendEvent({ event: 'ui.related_open', indicator: r.id, from: d.id })}
+                      className="text-blue-600 hover:underline"
+                    >
                       {r.name} &gt;
                     </Link>
                   </li>

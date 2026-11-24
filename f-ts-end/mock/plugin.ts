@@ -24,6 +24,21 @@ export function mockApi(): Plugin {
           handleAdmin(req, res, path, send).catch(next)
           return
         }
+        // 화면 동작 기록(40.api 7장). 받은 동작을 터미널에 한 줄로 보이고 언제나 204다.
+        if (path === '/events') {
+          if (req.method !== 'POST') {
+            res.setHeader('Allow', 'POST')
+            return send(res, 405, { error: 'method not allowed' })
+          }
+          let body = ''
+          req.on('data', (c: Buffer) => (body += c.toString()))
+          req.on('end', () => {
+            console.log(`[mock] /api/events ${body.slice(0, 200)}`)
+            res.statusCode = 204
+            res.end()
+          })
+          return
+        }
         // 방문자 수(40.api 6.2, 6.3). MOCK_VISITS=error면 500(footer 숫자가 숨는지 본다).
         if (path === '/visits' || path === '/visits/summary') {
           res.setHeader('Cache-Control', 'no-store')

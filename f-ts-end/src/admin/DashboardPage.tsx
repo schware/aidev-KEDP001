@@ -18,6 +18,7 @@ import { chartPeriodLabel } from './chartPeriod.ts'
 import { AddDialog, EditDialog } from './IndicatorDialogs.tsx'
 import { buttonClass, FormErrors, primaryButtonClass } from './ui.tsx'
 import { useAdminGet } from './useAdminGet.ts'
+import { adminAction } from '../events.ts'
 
 /** Dashboard 관리(/admin/dashboard, 50.web 5장). 지표 목록과 구분 목록(추가·편집의 구분 선택)을 읽는다. */
 export function DashboardPage() {
@@ -108,6 +109,7 @@ function Editor({ initial, categories }: { initial: AdminIndicator[]; categories
     setSaveErrors({})
     setSaveMessage(undefined)
     const body: DisplayOrderRequest = { indicators: draft.map((x, i) => ({ id: x.id, visible: x.visible, order: i + 1 })) }
+    adminAction('display_order_save')
     try {
       const res = await adminRequest<AdminIndicatorList>('PUT', displayOrderPath, body)
       setItems(res.indicators)
