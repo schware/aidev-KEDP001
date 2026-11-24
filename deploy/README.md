@@ -43,7 +43,18 @@ image:
 
 - go, rust는 multi-stage build이고 실행 image는 `scratch`다. `TZ=Asia/Seoul`이고, 사용자는 `65532`다.
 - `.env`와 관리자 계정 파일은 image에 넣지 않는다. `.env`는 go에만 `env_file`로 주고, 계정 파일은 읽기 전용 mount(`/run/kedp/admin`)로 준다.
-- API 키는 go container에만 들어간다(KEDP001-D012). rust에는 DB 비밀번호(`kedp_rust`)만, postgres에는 `POSTGRES_USER`, `POSTGRES_PASSWORD`만 준다.
+- API 키는 go container에만 들어간다(KEDP001-D012). rust에는 DB 비밀번호(`kedp_rust`)와 로그 level(`KEDP_LOG_LEVEL`)만, postgres에는 `POSTGRES_USER`, `POSTGRES_PASSWORD`만 준다.
+
+로그(KEDP001-D026):
+
+- container 4개 모두 Docker 로그 파일(`json-file`) 10 MB × 5개까지 둔다(`compose.yaml`의 `x-logging`). 넘으면 오래된 줄부터 지워지고, `docker compose down`으로 container를 지우면 로그도 지워진다.
+- go, rust, nginx는 `time=… level=… comp=… event=…` 한 줄 형식이다. nginx 접속 기록은 `event=http.access`이고, 일반 사용자의 접속 주소·User-Agent·Referer·query string은 남기지 않는다.
+- nginx는 요청마다 요청 ID(`$request_id`)를 만들어 접속 기록에 `req`로 남기고, `X-Request-ID`로 go에 넘긴다. 같은 요청의 go 줄에도 같은 `req`가 붙는다.
+
+```sh
+docker compose logs --since 24h | grep -E 'level=(WARN|ERROR)'   # 확인할 것만
+docker compose logs nginx go | grep 'req=<요청 ID>'               # 요청 하나 따라가기
+```
 
 ## 1. image 만들기 (dell-debian)
 
@@ -109,6 +120,7 @@ chmod 700 /srv/projects/kedp-backup
 | `KEDP_HTTP_PORT` | 바깥에 열 포트. 비우면 80 |
 | `KEDP_IMAGE_TAG` | 띄울 image tag(`build.sh`가 알려 준 tag) |
 | `KEDP_BACKUP_DIR` | 백업 폴더 절대 경로(예: `/srv/projects/kedp-backup`) |
+| `KEDP_LOG_LEVEL` | 로그 level(`DEBUG`, `INFO`, `WARN`, `ERROR`). 비우면 `INFO`. go와 rust가 같은 값을 쓴다. 바꾸면 `docker compose up -d go rust` |
 
 dell-debian과 달라지는 주소는 `compose.yaml`이 정한다. `.env`에 있어도 쓰지 않으므로 넣지 않아도 된다.
 

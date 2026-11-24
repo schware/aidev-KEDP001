@@ -3,6 +3,14 @@
 # 바깥에는 nginx 포트(KEDP_HTTP_PORT)만 연다. 나머지는 내부 network(kedp)에서만 접속한다.
 name: kedp
 
+# 로그(KEDP001-D026): container마다 Docker 로그 파일 10 MB × 5개(약 50 MB). 넘으면 오래된 줄부터 지운다.
+# docker compose down으로 container를 지우면 그 로그도 지워진다.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   postgres:
     # dell-debian의 kedp-postgres와 같은 major 버전
@@ -22,6 +30,7 @@ services:
       timeout: 5s
       retries: 12
     restart: unless-stopped
+    logging: *logging
 
   rust:
     image: ${KEDP_IMAGE_PREFIX:-}kedp-rust:${KEDP_IMAGE_TAG:?KEDP_IMAGE_TAG is not set}
@@ -33,11 +42,14 @@ services:
       KEDP_DB_PORT: "5432"
       KEDP_DB_NAME: kedp
       KEDP_PROCESSOR_ADDR: 0.0.0.0:50051
+      # 로그 level(KEDP001-D026). go는 .env(env_file)에서 같은 값을 읽는다.
+      KEDP_LOG_LEVEL: ${KEDP_LOG_LEVEL:-INFO}
     networks: [kedp]
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    logging: *logging
 
   go:
     image: ${KEDP_IMAGE_PREFIX:-}kedp-go:${KEDP_IMAGE_TAG:?KEDP_IMAGE_TAG is not set}
@@ -61,6 +73,7 @@ services:
         condition: service_started
     # 시작할 때 Rust Check가 실패하면 멈추므로(Rust가 아직 뜨지 않았을 때 등) 다시 띄운다.
     restart: unless-stopped
+    logging: *logging
 
   nginx:
     image: ${KEDP_IMAGE_PREFIX:-}kedp-nginx:${KEDP_IMAGE_TAG:?KEDP_IMAGE_TAG is not set}
@@ -69,6 +82,7 @@ services:
     networks: [kedp]
     depends_on: [go]
     restart: unless-stopped
+    logging: *logging
 
 networks:
   kedp:
