@@ -3,13 +3,13 @@ package admin
 import (
 	"bytes"
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/logx"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/store"
 )
 
@@ -58,8 +58,7 @@ func TestGetVisits(t *testing.T) {
 func captureLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	t.Cleanup(logx.SetOutput(&buf, slog.LevelDebug))
 	return &buf
 }
 
@@ -72,7 +71,7 @@ func TestSetVisitBase(t *testing.T) {
 	if res.code != http.StatusOK || res.body != visitsBody || st.visitBase == nil || *st.visitBase != 1000 {
 		t.Errorf("got %d %s", res.code, res.body)
 	}
-	if !strings.Contains(logs.String(), `admin audit: account "admin": visit_total_base 1000 -> 1000`) {
+	if !strings.Contains(logs.String(), `event=admin.audit account=admin change="visit_total_base 1000 -> 1000"`) {
 		t.Errorf("audit log: %q", logs.String())
 	}
 	for _, b := range []string{`{"base":0}`, `{"base":9007199254740991}`} {
@@ -112,7 +111,7 @@ func TestResetVisits(t *testing.T) {
 		t.Errorf("got %d %s", res.code, res.body)
 	}
 	if !strings.Contains(logs.String(),
-		`admin audit: account "admin": reset visits: deleted 3 days (42 visits), visit_total_base 1000 -> 0`) {
+		`event=admin.audit account=admin change="reset visits: deleted 3 days (42 visits), visit_total_base 1000 -> 0"`) {
 		t.Errorf("audit log: %q", logs.String())
 	}
 }

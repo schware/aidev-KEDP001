@@ -22,8 +22,47 @@ Go 수집 모듈. 자세한 구조와 결정은 `docs/dev-complete/b-go-end.md`�
 | `KEDP_ADMIN_ALLOW_IPS` | 관리자 API를 쓸 수 있는 IP 또는 CIDR, 쉼표로 나눈다. 비우면 관리자 API는 모두 403 | `server` |
 | `KEDP_TRUSTED_PROXIES` | `X-Forwarded-For`를 믿을 proxy의 IP 또는 CIDR, 쉼표로 나눈다. 비우면 `127.0.0.1`(개발용 Vite proxy) | `server` |
 | `KEDP_ADMIN_FILE` | 관리자 계정 파일 위치(절대 경로). 비우면 로그인할 수 없다 | `server` |
+| `KEDP_LOG_LEVEL` | 로그 level(`DEBUG`, `INFO`, `WARN`, `ERROR`). 비우면 `INFO`. 틀린 값이면 `INFO`로 두고 `config.log_level`(WARN)을 남긴다 | `server` |
 
 - 오류와 기록에는 변수 이름만 나오고 값(키, 접속 정보, 비밀번호, Rust 주소, API 주소, 허용 IP, 믿을 proxy, 계정 파일 위치)은 나오지 않는다.
+
+## 로그 (`internal/logx`, KEDP001-D026)
+
+`cmd/server`는 로그를 stderr에 한 줄씩 남긴다. 형식과 level 기준은 KEDP001-D026이다.
+
+```text
+time=2026-11-24T09:12:40.123+09:00 level=INFO comp=go event=http.request req=4f1c… method=GET path=/api/indicators status=200 ms=12
+time=2026-11-24T06:00:03.456+09:00 level=WARN comp=go event=collect.indicator run=812 indicator=cpi source=kosis status=error code=FETCH_FAILED rows=0 detail="page 1: …"
+```
+
+- 앞의 네 칸은 늘 같다: `time`(Asia/Seoul, 밀리초), `level`, `comp=go`, `event`. 그다음 요청 ID(`req`)나 수집 실행 ID(`run`, `indicator`, `page`), 그다음 그 줄의 값이다.
+- level은 `DEBUG`, `INFO`, `WARN`, `ERROR`뿐이다. `KEDP_LOG_LEVEL` 이상만 남긴다(기본 `INFO`).
+- 요청마다 끝날 때 `http.request` 한 줄을 남긴다. 2xx·3xx·404·로그인하지 않은 `GET /api/admin/session`의 401은 INFO, 그 밖의 4xx는 WARN, 5xx는 ERROR다. 500의 오류 내용은 이 줄의 `err`에 붙고 따로 찍지 않는다.
+- 요청 ID: `X-Request-ID`를 받아 쓰고(영문·숫자·`-_.`, 64자까지), 없거나 형식이 틀리면 만든다. 그 요청의 모든 줄에 `req`로 붙이고 응답 헤더로 돌려준다.
+- 남기지 않는 것: 키(제공처 주소는 `***`로 가림), 비밀번호, cookie, 요청·응답 본문, query string, 일반 사용자의 접속 주소와 User-Agent. 관리자 로그인과 허용 IP 거부(403 `http.request`의 `ip`)만 접속 주소를 남긴다.
+
+| event | level |
+| --- | --- |
+| `server.start`(`mode`, `log_level`), `server.stop`(`reason`) | INFO. 오류로 멈추면 그 앞에 ERROR 한 줄(`processor.check`, `collect.finish` 또는 `server.error`) |
+| `config.log_level`, `config.admin` | WARN |
+| `processor.check` | 성공 INFO, 실패 ERROR |
+| `http.request` | 응답 코드로(위) |
+| `schedule.tick` | DEBUG. 수집 시각을 읽지 못하면 ERROR |
+| `schedule.next` | INFO |
+| `collect.start` | INFO |
+| `collect.indicator` | 성공·no_data INFO, 실패 WARN |
+| `collect.finish` | 모두 성공 INFO, 일부 실패 WARN, 수집이 멈춤 ERROR, 서버를 끄느라 멈춤 WARN |
+| `fetch.request` | 200 DEBUG, 받지 못함·200 아님 WARN |
+| `admin.login` | 성공 INFO, 실패 WARN |
+| `admin.logout`, `admin.audit` | INFO |
+| `visit.limit` | WARN |
+| `http.write`, `http.error` | DEBUG(응답을 쓰지 못함, 대개 연결 끊김) / ERROR(`http.request` 밖에서 난 500, 시험용) |
+
+```sh
+docker compose logs --since 24h go | grep -E 'level=(WARN|ERROR)'   # 확인할 것만
+docker compose logs go | grep 'req=4f1c'                             # 요청 하나 따라가기
+docker compose logs go | grep 'event=collect\.'                      # 수집
+```
 
 ## 지표 넣기 (`cmd/seed`)
 
@@ -163,7 +202,7 @@ docker exec kedp-postgres dropdb -U sunmoon kedp_visit_check
 - 요청 주소는 `RemoteAddr`이고, `RemoteAddr`가 믿을 proxy(`KEDP_TRUSTED_PROXIES`, 비우면 `127.0.0.1`) 안에 있을 때만 `X-Forwarded-For`의 마지막 주소를 쓴다. 배포(`deploy/`)에서는 nginx가 있는 Docker 내부 network를 넣는다.
 - session은 서버 메모리에 있다. 서버를 다시 켜면 다시 로그인한다.
 - 계정 파일은 서버를 켤 때 읽는다. 파일을 바꾸면 서버를 다시 켠다. `KEDP_ADMIN_FILE`이 있는데 파일을 읽지 못하거나 형식이 틀리면 서버가 시작하지 않는다.
-- 관리자가 바꾼 내용은 서버 기록에 `admin audit: account "…": …`로 남는다. 비밀번호와 cookie 값은 남기지 않는다.
+- 관리자가 바꾼 내용은 서버 기록에 `event=admin.audit account=… change="…"`로 남는다. 비밀번호와 cookie 값은 남기지 않는다.
 - 지표 삭제, API 키 변경, 재수집, 연결 시험 API는 없다.
 
 ### 계정 파일 만들기 (`cmd/adminpass`)

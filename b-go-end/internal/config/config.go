@@ -119,6 +119,16 @@ func LoadAPIAddr(path string) (string, error) {
 	return DefaultAPIAddr, nil
 }
 
+// LoadLogLevel은 로그 level(KEDP_LOG_LEVEL) 값을 그대로 읽는다. 비어 있으면 ""다.
+// 읽는 쪽(logx.ParseLevel)이 DEBUG, INFO, WARN, ERROR인지 확인한다(KEDP001-D026 3장).
+func LoadLogLevel(path string) (string, error) {
+	get, err := lookup(path)
+	if err != nil {
+		return "", err
+	}
+	return get("KEDP_LOG_LEVEL"), nil
+}
+
 // Admin은 관리자 API 설정이다(KEDP001-D018). 값을 출력하거나 기록하지 않는다.
 type Admin struct {
 	// AllowIPs는 관리자 API를 쓸 수 있는 주소다. 비어 있으면 관리자 API는 모두 403이다.

@@ -7,13 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/logx"
 )
 
 const masked = "***"
@@ -121,32 +122,49 @@ func (c *Client) target(rawURL string) (string, error) {
 // Get은 rawURL에 GET 요청을 보내고 응답 본문을 돌려준다.
 // 돌려주는 오류에는 가린 주소만 들어 있다. 원래 오류는 키가 들어 있어 감싸지 않는다.
 // 상태 코드가 200이 아니면 *StatusError를 돌려준다.
+// 요청마다 fetch.request 한 줄을 남긴다: 200이면 DEBUG, 받지 못했거나 200이 아니면 WARN(KEDP001-D026 4장).
+// 주소는 키를 가린 것만 남긴다. ctx에 logx.With로 붙인 run, indicator, page가 함께 나온다.
 func (c *Client) Get(ctx context.Context, rawURL string) ([]byte, error) {
 	rawURL, err := c.target(rawURL)
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("GET %s", c.Mask(rawURL))
+	start := time.Now()
+	body, status, err := c.get(ctx, rawURL)
+	args := []any{"url", c.Mask(rawURL), "ms", time.Since(start).Milliseconds()}
+	if status != 0 {
+		args = append(args, "status", status)
+	}
+	switch {
+	case err != nil:
+		logx.Warn(ctx, "fetch.request", append(args, "err", err.Error())...)
+		return nil, err
+	case status != http.StatusOK:
+		logx.Warn(ctx, "fetch.request", args...)
+		return nil, &StatusError{URL: c.Mask(rawURL), Code: status, Body: body}
+	}
+	logx.Debug(ctx, "fetch.request", args...)
+	return body, nil
+}
 
+// get은 요청을 보내 본문과 상태 코드를 돌려준다. 오류에는 가린 글만 넣는다. 응답을 받으면 record를 부른다.
+func (c *Client) get(ctx context.Context, rawURL string) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, errors.New(c.Mask(err.Error()))
+		return nil, 0, errors.New(c.Mask(err.Error()))
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, errors.New(c.Mask(err.Error()))
+		return nil, 0, errors.New(c.Mask(err.Error()))
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.New(c.Mask(fmt.Sprintf("read %s: %v", rawURL, err)))
+		return nil, resp.StatusCode, errors.New(c.Mask(fmt.Sprintf("read %s: %v", rawURL, err)))
 	}
 	record(ctx, Exchange{URL: c.Mask(rawURL), Status: resp.StatusCode, ReceivedAt: time.Now(), Body: body})
-	if resp.StatusCode != http.StatusOK {
-		return nil, &StatusError{URL: c.Mask(rawURL), Code: resp.StatusCode, Body: body}
-	}
-	return body, nil
+	return body, resp.StatusCode, nil
 }
 
 // Save는 응답 본문을 dir/name에 저장한다. 본문에 키가 (어떤 형태로든) 들어 있으면 저장하지 않는다.

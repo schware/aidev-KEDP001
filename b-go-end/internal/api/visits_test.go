@@ -4,16 +4,16 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
-	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/logx"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/store"
 )
 
@@ -245,8 +245,7 @@ func TestVisitMethodsAndPaths(t *testing.T) {
 func TestVisitStoreErrorNoPersonalData(t *testing.T) {
 	x := newVisitHarness(t, 0)
 	var logs bytes.Buffer
-	log.SetOutput(&logs)
-	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	t.Cleanup(logx.SetOutput(&logs, slog.LevelDebug))
 
 	x.st.err = errors.New("update visit_daily: boom")
 	if rec := x.visit(proxy, uaA, "X-Forwarded-For", "203.0.113.77"); rec.Code != http.StatusInternalServerError ||
@@ -262,7 +261,7 @@ func TestVisitStoreErrorNoPersonalData(t *testing.T) {
 		t.Errorf("after DB error: count = %d, want 1", n)
 	}
 	out := logs.String()
-	if !strings.Contains(out, "POST /api/visits: update visit_daily: boom") {
+	if !strings.Contains(out, `event=http.error method=POST path=/api/visits err="update visit_daily: boom"`) {
 		t.Errorf("log = %q", out)
 	}
 	for _, s := range []string{"203.0.113.77", "172.18.0.5", uaA, "test-browser"} {
@@ -275,8 +274,7 @@ func TestVisitStoreErrorNoPersonalData(t *testing.T) {
 func TestVisitLimit(t *testing.T) {
 	x := newVisitHarness(t, 2)
 	var logs bytes.Buffer
-	log.SetOutput(&logs)
-	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	t.Cleanup(logx.SetOutput(&logs, slog.LevelDebug))
 	x.visit(userA, uaA)
 	x.visit(userB, uaA)
 	x.visit(userA, uaB) // 상한을 넘어 세지 않는다
@@ -285,7 +283,7 @@ func TestVisitLimit(t *testing.T) {
 	if n := x.count("2026-10-30"); n != 2 {
 		t.Errorf("count = %d, want 2", n)
 	}
-	if c := strings.Count(logs.String(), "not counting more today"); c != 1 {
+	if c := strings.Count(logs.String(), "level=WARN comp=go event=visit.limit limit=2 day=2026-10-30"); c != 1 {
 		t.Errorf("limit logged %d times: %q", c, logs.String())
 	}
 	// 다음 날에는 다시 센다.

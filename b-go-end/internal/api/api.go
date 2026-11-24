@@ -12,11 +12,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"net"
 	"net/http"
 	"time"
 
+	"github.com/schware/aidev-KEDP001/b-go-end/internal/logx"
 	"github.com/schware/aidev-KEDP001/b-go-end/internal/store"
 )
 
@@ -187,13 +187,14 @@ func write(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		log.Printf("api: write response: %v", err)
+		// 대개 받는 쪽이 연결을 끊은 것이다. 응답 코드는 이미 보냈으므로 http.request 줄은 그대로 남는다.
+		logx.Debug(context.Background(), "http.write", "err", err.Error())
 	}
 }
 
-// serverError는 오류를 기록하고 화면에는 내용 없이 500을 돌려준다.
+// serverError는 화면에는 내용 없이 500을 돌려준다. 오류는 그 요청의 http.request 줄(ERROR)에 err로 붙는다.
 func serverError(w http.ResponseWriter, r *http.Request, err error) {
-	log.Printf("api: %s %s: %v", r.Method, r.URL.Path, err)
+	logx.SetError(r, err)
 	write(w, http.StatusInternalServerError, Error{"internal error"})
 }
 

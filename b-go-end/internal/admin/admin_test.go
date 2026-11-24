@@ -1,11 +1,9 @@
 package admin
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -277,9 +275,7 @@ func TestLoginCookie(t *testing.T) {
 
 func TestLoginFailedSameResponse(t *testing.T) {
 	x := newHarness(t, &fakeStore{})
-	var logs bytes.Buffer
-	log.SetOutput(&logs)
-	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	logs := captureLog(t)
 	for _, body := range []string{
 		`{"account":"admin","password":"wrong password!!"}`,
 		`{"account":"nobody","password":"` + testPassword + `"}`,
